@@ -14,7 +14,8 @@
 //! Two permissions matter: **Accessibility** (the hook's event tap) and **Input
 //! Monitoring** (opening HID devices via `IOHIDManager`). **Bluetooth** is
 //! surfaced for completeness — OpenRoadie reaches BLE mice through `IOHIDManager`,
-//! so it usually reads [`PermissionStatus::Unknown`].
+//! so it usually reads `PermissionStatus::Unknown` (plain text rather than a
+//! link: the type does not exist on Windows, where the link would be broken).
 //!
 //! Accessibility status is not read here: the agent owns the tap, so
 //! `roadie_hook::has_accessibility` is the source of truth.
