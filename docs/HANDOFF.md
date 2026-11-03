@@ -1025,12 +1025,18 @@ Four findings worth keeping:
 - **The monitors.** Windows draws only to the LG TV over HDMI, which speaks
   CEC rather than DDC, as on the Mac. The USB-C monitor shows up only as two
   "USB Billboard" devices — alt-mode never negotiated, so no video at all on
-  that port. Also, the Windows display backend names a monitor `display-1`
-  where `WmiMonitorID` knows "LG TV SSCR2"; worth fixing.
-
-The MX Mechanical and MX Master 3S were reported offline by the Bolt
-receiver (asleep or on another Easy-Switch channel), so HID++ on Windows is
-still unverified past the receiver.
+  that port: the board's USB4 port carries only the Intel iGPU's video,
+  which is disabled, and the 5090 does not feed it. On HDMI to the 5090 the
+  HG560T34 answered, and two Windows backend defects showed and are fixed:
+  every read-back straight after a write failed with an I²C error although
+  the write had landed (the backend now owes the specified 50 ms after a
+  write, through `Pacer`), and the monitor was named `display-1` (the EDID
+  is now read from the registry via `EnumDisplayDevicesW`). Verified: named
+  "RTK HG560T34", brightness 90 and back to 100, each read back.
+- **Logi Options+ was uninstalled** at Nadir's request, with its plugin
+  service. After it was gone, the MX Mechanical and MX Master 3S both
+  answered on HID++: battery, DPI 1000 to 1050 and back, SmartShift ratchet
+  to free and back, and the backlight read.
 
 ## 7. What a session can do with nobody at the desk
 
