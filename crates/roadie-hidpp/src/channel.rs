@@ -344,18 +344,17 @@ impl HidppChannel {
         match &self.sw_id_policy {
             SwIdPolicy::Fixed(id) | SwIdPolicy::Leased { id, .. } => id.get(),
             SwIdPolicy::Rotating(counter) => {
-                // The closure always returns `Some`, so `fetch_update` never
+                // The closure always returns `Some`, so `try_update` never
                 // reports `Err`; both arms carry the same pre-update value.
-                let previous =
-                    match counter.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |old| {
-                        Some(if old & 0x0f == 0x0f {
-                            0x01
-                        } else {
-                            old.wrapping_add(1)
-                        })
-                    }) {
-                        Ok(previous) | Err(previous) => previous,
-                    };
+                let previous = match counter.try_update(Ordering::SeqCst, Ordering::SeqCst, |old| {
+                    Some(if old & 0x0f == 0x0f {
+                        0x01
+                    } else {
+                        old.wrapping_add(1)
+                    })
+                }) {
+                    Ok(previous) | Err(previous) => previous,
+                };
                 U4::from_lo(previous)
             }
         }
