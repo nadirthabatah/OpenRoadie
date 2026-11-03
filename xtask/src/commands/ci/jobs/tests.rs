@@ -25,13 +25,28 @@ fn workflow() -> Option<String> {
 
 /// The workflow with its line continuations joined back up and every run of
 /// whitespace collapsed, so a command it wraps for readability is one line
-/// again.
+/// again. CRLF is folded first: a Windows checkout with `core.autocrlf`
+/// leaves `\` followed by `\r\n`, which would otherwise join nothing.
 fn workflow_commands(workflow: &str) -> String {
     workflow
+        .replace("\r\n", "\n")
         .replace("\\\n", " ")
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+#[test]
+fn a_crlf_checkout_joins_its_continuations_like_an_lf_one() {
+    let lf = "run: |\n  cargo doc --workspace \\\n    --exclude roadie-ui\n";
+    assert_eq!(
+        workflow_commands(&lf.replace('\n', "\r\n")),
+        "run: | cargo doc --workspace --exclude roadie-ui"
+    );
+    assert_eq!(
+        workflow_commands(lf),
+        workflow_commands(&lf.replace('\n', "\r\n"))
+    );
 }
 
 /// `ci.yml` is the pipeline's source of truth and this runner is a copy of it.
