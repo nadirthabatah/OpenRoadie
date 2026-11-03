@@ -1008,10 +1008,20 @@ Four findings worth keeping:
   one UAC prompt; the claim error now names that command. Verified end to
   end on this desk: GUID removed, the error named the command, `prepare`
   fixed it, `status` read both inputs.
-- **The local toolchain is 1.99 and the pin is `stable`**, so CI will meet
-  what this PC met: a deprecated `fetch_update` in `roadie-hidpp` and
-  `double_must_use` on every `#[async_trait]` method in `roadie-hid` and
-  `roadie-cli`. Pre-existing, not from this sitting; its own fix.
+- **Rust 1.99 broke the gate, and it is fixed.** `double_must_use` on every
+  `#[async_trait]` method (async-trait 0.1.92 stops emitting it), a deprecated
+  `fetch_update` (`try_update` exists on the 1.98 floor), and the new
+  `assert_is_empty` lint across 51 tests. A fresh advisory database also
+  failed cargo-deny on two yanked crates and on rustls, webpki-roots and
+  tokio advisories, all patched within their semver lines with the gpui pin
+  held. The zbus 5 subcrates are ignored with a reason in `deny.toml`:
+  gpui_linux keeps zbus 5 in the app either way. Two Windows-only gate
+  failures were fixed too: a rustdoc link to a type Windows lacks, and the
+  `ci.yml` drift test choking on CRLF checkouts. Full gate on this PC: 8 CI
+  jobs passed (shell and the OS-bound test and MSRV jobs skipped by the
+  runner; MSRV and `cargo test --workspace` were run by hand and pass).
+  Running the runner itself on Windows needs a copy of `xtask.exe` outside
+  `target`, or its publish-closure step cannot rebuild itself.
 - **Smart App Control blocks every freshly built binary.** It was on here, so
   build scripts, proc-macro DLLs and a rebuilt `roadie.exe` were all refused
   (os error 4551, Code Integrity event 3077). Nadir had it switched off on
