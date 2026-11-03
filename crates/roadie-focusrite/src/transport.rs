@@ -161,9 +161,16 @@ impl UsbTransport {
         })?;
         let interface = device
             .claim_interface(attached.control_interface)
-            .map_err(|error| ControlError::Claim {
-                name: name.clone(),
-                reason: error.to_string(),
+            .map_err(|error| {
+                let reason = error.to_string();
+                if crate::windows_setup::is_unpublished(&reason) {
+                    ControlError::WindowsUnpublished { name: name.clone() }
+                } else {
+                    ControlError::Claim {
+                        name: name.clone(),
+                        reason,
+                    }
+                }
             })?;
         tracing::debug!(
             device = %name,

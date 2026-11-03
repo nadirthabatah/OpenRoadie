@@ -44,6 +44,9 @@ pub enum AudioCmd {
     Mute(MuteArgs),
     /// Switch 48 volt phantom power on or off for one input.
     Phantom(PhantomArgs),
+    /// On Windows, finish setting up the control channel, once per computer.
+    /// Raises one Windows permission prompt. Other systems need nothing.
+    Prepare,
 }
 
 #[derive(Debug, Args)]
@@ -103,8 +106,42 @@ impl AudioCmd {
             Self::Gain(args) => gain(&args),
             Self::Mute(args) => mute(&args),
             Self::Phantom(args) => phantom(&args),
+            Self::Prepare => prepare(),
         }
     }
+}
+
+#[cfg(target_os = "windows")]
+fn prepare() -> Result<()> {
+    use roadie_focusrite::windows_setup::{Prepared, prepare};
+
+    println!("Windows will ask for permission to change this computer. Accept it to go on.");
+    match prepare()? {
+        Prepared::Done => {
+            println!("Done. The control channel is set up; check it with: roadie audio status");
+            Ok(())
+        }
+        Prepared::Declined => Err(anyhow!(
+            "Nothing was changed, because the permission prompt was declined or not answered. \
+             Run roadie audio prepare again to retry."
+        )),
+        Prepared::Failed(count) => Err(anyhow!(
+            "{} could not be set up. Unplugging the interface, plugging it back in, and \
+             running roadie audio prepare again is the next thing to try.",
+            counted(
+                usize::try_from(count).unwrap_or(1),
+                "interface",
+                "interfaces"
+            )
+        )),
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+#[expect(clippy::unnecessary_wraps, reason = "matches the Windows signature")]
+fn prepare() -> Result<()> {
+    println!("Nothing to prepare: only Windows needs this step.");
+    Ok(())
 }
 
 /// Every interface, whether or not this build can drive it.
