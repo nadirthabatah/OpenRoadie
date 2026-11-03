@@ -8,6 +8,7 @@ use clap::Parser;
 use tracing_subscriber::{EnvFilter, fmt};
 
 pub mod bundle;
+mod choose;
 mod cmd;
 pub mod profile;
 pub mod spoken;

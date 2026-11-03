@@ -9,6 +9,7 @@
 //! paste into an issue, which is a far better way to close that gap than
 //! asking a user to describe what happened.
 
+use crate::choose;
 use crate::spoken::counted;
 
 mod layout;
@@ -43,6 +44,10 @@ const WATCH: Duration = Duration::from_secs(15);
 /// `roadie streamdeck`, whose bare form defaults to `list`.
 #[derive(Debug, Args)]
 pub struct StreamDeckArgs {
+    /// Case-insensitive part of the deck's name, model or serial number, as
+    /// `roadie streamdeck list` says it. Not needed when only one is attached.
+    #[arg(long, global = true, value_parser = clap::builder::NonEmptyStringValueParser::new())]
+    pub device: Option<String>,
     #[command(subcommand)]
     pub cmd: Option<StreamDeckCmd>,
 }
@@ -177,7 +182,7 @@ impl StreamDeckCmd {
     ///
     /// Propagates enumeration and I/O failures. "No device attached" is not an
     /// error: it exits [`NOTHING_FOUND`].
-    pub async fn run(self) -> Result<ExitCode> {
+    pub async fn run(self, device: Option<&str>) -> Result<ExitCode> {
         // Listing the library needs no device either, and is the answer to
         // "what did I call that layout".
         if matches!(self, Self::Layouts) {
@@ -242,6 +247,7 @@ impl StreamDeckCmd {
             report_nothing_found().await?;
             return Ok(ExitCode::from(NOTHING_FOUND));
         }
+        let collections = choose::narrow(collections, device, &DECKS)?;
 
         self.dispatch(&collections, parsed, target.as_deref()).await
     }
@@ -1117,12 +1123,13 @@ fn list(collections: &[Attached]) {
     }
 }
 
-/// Open the collection the driver prefers.
+/// Open the collection the driver prefers, on the one deck in reach.
+///
+/// `collections` is already narrowed by `--device`; more than one deck left
+/// in it is refused rather than resolved by enumeration order (see
+/// [`crate::choose`]).
 async fn open_preferred(collections: &[Attached]) -> Result<Session> {
-    let preferred = streamdeck::preferred(collections);
-    let chosen = preferred
-        .first()
-        .ok_or_else(|| anyhow!("no Stream Deck collection could be selected"))?;
+    let chosen = choose::only(streamdeck::preferred(collections), &DECKS)?;
     Session::open(chosen).await.with_context(|| {
         format!(
             "failed to open the {}. The commonest cause is another program holding it: \
@@ -1131,6 +1138,29 @@ async fn open_preferred(collections: &[Attached]) -> Result<Session> {
             chosen.model.name
         )
     })
+}
+
+/// What `--device` and its refusals call these.
+const DECKS: choose::Kind = choose::Kind {
+    one: "Stream Deck",
+    many: "Stream Decks",
+};
+
+impl choose::Choosable for Attached {
+    fn spoken(&self) -> String {
+        match &self.serial_number {
+            Some(serial) => format!("{}, serial {serial}", self.model.name),
+            None => self.model.name.to_owned(),
+        }
+    }
+
+    fn names(&self) -> Vec<&str> {
+        vec![
+            self.model.name,
+            &self.name,
+            self.serial_number.as_deref().unwrap_or_default(),
+        ]
+    }
 }
 
 /// Parse a six-hex-digit colour.
