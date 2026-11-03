@@ -10,7 +10,7 @@
 //! The fix is the one an INF's `AddReg` (or Zadig) would make: write a GUID
 //! into the interface's `Device Parameters` and restart that one interface.
 //! The audio interfaces are separate device nodes and are never touched.
-//! Writing under `HKLM` needs an administrator, so [`prepare`] raises one
+//! Writing under `HKLM` needs an administrator, so `prepare` raises one
 //! Windows permission prompt and does nothing else that needs it.
 
 /// The interface GUID OpenRoadie publishes a Focusrite control interface
@@ -55,7 +55,7 @@ exit $failed
     )
 }
 
-/// How [`prepare`] ended.
+/// How `prepare` ended. (Not a link: `prepare` exists only on Windows.)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Prepared {
     /// Every interface that needed it is published now.
