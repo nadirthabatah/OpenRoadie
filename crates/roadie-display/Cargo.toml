@@ -26,6 +26,8 @@ windows-sys = { workspace = true, features = [
     "Win32_Devices_Display",
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
+    "Win32_System_Registry",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 
 # IOAVService is private, so there is no typed framework crate to use — the

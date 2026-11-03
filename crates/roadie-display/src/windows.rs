@@ -6,24 +6,37 @@
 //! directly and never touches [`crate::Ddc`] or a packet. A seam one layer
 //! lower would have handed Windows a packet layer to route around.
 //!
-//! What it costs is identification. `dxva2` describes a monitor as whatever
+//! What it does not do is identify. `dxva2` describes a monitor as whatever
 //! the driver called it, which is very often "Generic PnP Monitor" for every
-//! panel on the desk. The EDID is in the registry, under SetupAPI, and reading
-//! it is a separate piece of work — so displays here are numbered rather than
-//! named, and that is a real gap rather than a temporary one.
+//! panel on the desk. The EDID is in the registry, under the monitor's device
+//! instance, and [`edid_for`] follows the `HMONITOR` there — so a display is
+//! named when Windows kept its EDID, and numbered only when it did not.
+//!
+//! Nor does it pace writes. `dxva2` waits for each reply, but nothing stops a
+//! read from following a write sooner than the 50 ms the specification asks
+//! for. On an RTK HG560T34 over HDMI, 2026-11-03, every read-back straight
+//! after a brightness write failed with an I²C error while the write itself
+//! had landed — so the backend owes that gap itself, with [`Pacer`].
 
 use std::ffi::c_void;
+use std::time::Instant;
 
-use roadie_ddc::{Capabilities, Feature, Value};
+use roadie_ddc::{Capabilities, Edid, Feature, Value};
 use windows_sys::Win32::Devices::Display::{
     CapabilitiesRequestAndCapabilitiesReply, DestroyPhysicalMonitor, GetCapabilitiesStringLength,
     GetNumberOfPhysicalMonitorsFromHMONITOR, GetPhysicalMonitorsFromHMONITOR,
     GetVCPFeatureAndVCPFeatureReply, PHYSICAL_MONITOR, SaveCurrentSettings, SetVCPFeature,
 };
-use windows_sys::Win32::Foundation::{LPARAM, RECT, TRUE};
-use windows_sys::Win32::Graphics::Gdi::{EnumDisplayMonitors, HDC, HMONITOR};
+use windows_sys::Win32::Foundation::{ERROR_SUCCESS, LPARAM, RECT, TRUE};
+use windows_sys::Win32::Graphics::Gdi::{
+    DISPLAY_DEVICEW, EnumDisplayDevicesW, EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR,
+    MONITORINFOEXW,
+};
+use windows_sys::Win32::System::Registry::{HKEY_LOCAL_MACHINE, RRF_RT_REG_BINARY, RegGetValueW};
+use windows_sys::Win32::UI::WindowsAndMessaging::EDD_GET_DEVICE_INTERFACE_NAME;
 
 use crate::backend::{DisplayError, VcpBackend, boxed};
+use crate::ddc::{Pacer, Pacing};
 use crate::{Display, DisplayId};
 
 /// One physical monitor, as `dxva2` hands it out.
@@ -36,12 +49,28 @@ use crate::{Display, DisplayId};
 pub(crate) struct PhysicalMonitor {
     handle: isize,
     name: String,
+    /// The gap still owed after the last write.
+    pacer: Pacer,
 }
 
 impl PhysicalMonitor {
     /// The handle, back in the shape the API wants.
     fn raw(&self) -> *mut c_void {
         self.handle as *mut c_void
+    }
+
+    /// Wait out whatever the last write still owes before the next call.
+    fn settle(&self) {
+        let wait = self.pacer.wait_at(Instant::now());
+        if !wait.is_zero() {
+            std::thread::sleep(wait);
+        }
+    }
+
+    /// Record that a write just went out.
+    fn wrote(&mut self) {
+        self.pacer
+            .finished(Instant::now(), Pacing::SPECIFIED.after_write);
     }
 
     /// Shape a failed call as an error, using the OS's own explanation.
@@ -79,6 +108,7 @@ impl VcpBackend for PhysicalMonitor {
 
     #[expect(unsafe_code, reason = "the dxva2 monitor-configuration API is a C API")]
     fn get(&mut self, feature: Feature) -> Result<Value, DisplayError> {
+        self.settle();
         let mut kind = 0;
         let mut current = 0_u32;
         let mut maximum = 0_u32;
@@ -109,8 +139,10 @@ impl VcpBackend for PhysicalMonitor {
 
     #[expect(unsafe_code, reason = "the dxva2 monitor-configuration API is a C API")]
     fn set(&mut self, feature: Feature, value: u16) -> Result<(), DisplayError> {
+        self.settle();
         // SAFETY: the handle is live for the lifetime of `self`.
         let ok = unsafe { SetVCPFeature(self.raw(), feature.code(), u32::from(value)) };
+        self.wrote();
         if ok != TRUE {
             return Err(self.failed("writing a feature"));
         }
@@ -119,6 +151,7 @@ impl VcpBackend for PhysicalMonitor {
 
     #[expect(unsafe_code, reason = "the dxva2 monitor-configuration API is a C API")]
     fn capabilities(&mut self) -> Result<Capabilities, DisplayError> {
+        self.settle();
         let mut length = 0_u32;
         // SAFETY: the handle is live and `length` is a stack local.
         let ok = unsafe { GetCapabilitiesStringLength(self.raw(), &raw mut length) };
@@ -168,8 +201,10 @@ impl VcpBackend for PhysicalMonitor {
 
     #[expect(unsafe_code, reason = "the dxva2 monitor-configuration API is a C API")]
     fn save_settings(&mut self) -> Result<(), DisplayError> {
+        self.settle();
         // SAFETY: the handle is live for the lifetime of `self`.
         let ok = unsafe { SaveCurrentSettings(self.raw()) };
+        self.wrote();
         if ok != TRUE {
             return Err(self.failed("saving the current settings"));
         }
@@ -254,12 +289,14 @@ pub(crate) fn enumerate() -> Result<Vec<Display>, DisplayError> {
             continue;
         }
 
-        for monitor in physical {
+        let output = handle;
+        for (position, monitor) in (0_u32..).zip(physical) {
             // `PHYSICAL_MONITOR` is a packed struct, so its fields are copied
             // out before being read. Borrowing one in place would be an
             // unaligned reference, which is undefined behaviour even unread.
             let description = monitor.szPhysicalMonitorDescription;
             let handle = monitor.hPhysicalMonitor as isize;
+            let edid = edid_for(output, position);
             let name = String::from_utf16_lossy(&description)
                 .trim_end_matches('\0')
                 .trim()
@@ -270,17 +307,141 @@ pub(crate) fn enumerate() -> Result<Vec<Display>, DisplayError> {
             } else {
                 name
             };
-            let backend = PhysicalMonitor { handle, name };
-            // Numbered, because `dxva2` very often calls every panel on the
-            // desk the same thing. Without the EDID there is nothing better to
-            // distinguish them by, and a list of three identical names would
-            // be worse than a list of three numbers.
+            let backend = PhysicalMonitor {
+                handle,
+                name,
+                pacer: Pacer::default(),
+            };
+            // The handle stays numbered, because `dxva2` very often calls
+            // every panel on the desk the same thing; the spoken name comes
+            // from the EDID whenever Windows kept one.
             displays.push(Display::new(
                 DisplayId::new(format!("display-{}", index + 1)),
-                None,
+                edid,
                 boxed(backend),
             ));
         }
     }
     Ok(displays)
+}
+
+/// NUL-terminated UTF-16, the shape every `W` call wants.
+fn wide(text: &str) -> Vec<u16> {
+    text.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+/// The device instance a monitor's interface path names.
+///
+/// `EnumDisplayDevicesW` hands back an interface path, such as
+/// `\\?\DISPLAY#RTK6034#5&23865088&0&UID8448#{e6f07b5f-…}`, and the registry
+/// files the EDID under the instance it is built from, with `\` for `#` and
+/// the interface class dropped: `DISPLAY\RTK6034\5&23865088&0&UID8448`.
+fn instance_id(interface: &str) -> Option<String> {
+    let rest = interface.strip_prefix(r"\\?\")?;
+    let (instance, class) = rest.rsplit_once('#')?;
+    class.starts_with('{').then(|| instance.replace('#', r"\"))
+}
+
+/// The EDID of the `position`th physical monitor behind `output`, as Windows
+/// recorded it when the monitor arrived. `None` when any step comes up empty:
+/// a monitor without a name is still a monitor that can be driven.
+#[expect(
+    unsafe_code,
+    reason = "the display-device and registry APIs are C APIs"
+)]
+fn edid_for(output: HMONITOR, position: u32) -> Option<Edid> {
+    let mut info = MONITORINFOEXW::default();
+    info.monitorInfo.cbSize = u32::try_from(size_of::<MONITORINFOEXW>()).ok()?;
+    // SAFETY: `output` came from `EnumDisplayMonitors`, and `info` is a
+    // `MONITORINFOEXW` whose `cbSize` says so, which is how the API is told
+    // it may write the extended form.
+    if unsafe { GetMonitorInfoW(output, (&raw mut info).cast()) } != TRUE {
+        return None;
+    }
+
+    let mut device = DISPLAY_DEVICEW {
+        cb: u32::try_from(size_of::<DISPLAY_DEVICEW>()).ok()?,
+        ..DISPLAY_DEVICEW::default()
+    };
+    // SAFETY: `szDevice` is the NUL-terminated adapter name the previous
+    // call wrote, and `device` carries its own size in `cb`.
+    let ok = unsafe {
+        EnumDisplayDevicesW(
+            info.szDevice.as_ptr(),
+            position,
+            &raw mut device,
+            EDD_GET_DEVICE_INTERFACE_NAME,
+        )
+    };
+    if ok != TRUE {
+        return None;
+    }
+    let interface = String::from_utf16_lossy(&device.DeviceID);
+    let instance = instance_id(interface.trim_end_matches('\0'))?;
+
+    let key = wide(&format!(
+        r"SYSTEM\CurrentControlSet\Enum\{instance}\Device Parameters"
+    ));
+    let value = wide("EDID");
+    let mut length = 0_u32;
+    // SAFETY: both strings are NUL-terminated locals; a null buffer asks
+    // only for the length, which lands in a stack local.
+    let status = unsafe {
+        RegGetValueW(
+            HKEY_LOCAL_MACHINE,
+            key.as_ptr(),
+            value.as_ptr(),
+            RRF_RT_REG_BINARY,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &raw mut length,
+        )
+    };
+    if status != ERROR_SUCCESS || length == 0 {
+        return None;
+    }
+    let mut bytes = vec![0_u8; usize::try_from(length).ok()?];
+    // SAFETY: the buffer has exactly the `length` bytes the previous call
+    // asked for, and `length` tells the API so.
+    let status = unsafe {
+        RegGetValueW(
+            HKEY_LOCAL_MACHINE,
+            key.as_ptr(),
+            value.as_ptr(),
+            RRF_RT_REG_BINARY,
+            std::ptr::null_mut(),
+            bytes.as_mut_ptr().cast(),
+            &raw mut length,
+        )
+    };
+    if status != ERROR_SUCCESS {
+        return None;
+    }
+    Edid::parse(bytes.get(..usize::try_from(length).ok()?)?).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::instance_id;
+
+    #[test]
+    fn an_interface_path_becomes_the_instance_the_registry_files_its_edid_under() {
+        // Literal path and instance from this desk's HG560T34, 2026-11-03.
+        assert_eq!(
+            instance_id(
+                r"\\?\DISPLAY#RTK6034#5&23865088&0&UID8448#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}"
+            )
+            .as_deref(),
+            Some(r"DISPLAY\RTK6034\5&23865088&0&UID8448")
+        );
+    }
+
+    #[test]
+    fn a_path_that_is_not_an_interface_path_names_nothing() {
+        assert_eq!(instance_id(r"DISPLAY\RTK6034\5&23865088&0&UID8448"), None);
+        assert_eq!(
+            instance_id(r"\\?\DISPLAY#RTK6034#5&23865088&0&UID8448"),
+            None
+        );
+    }
 }
