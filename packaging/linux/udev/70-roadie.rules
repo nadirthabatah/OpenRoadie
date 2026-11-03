@@ -35,6 +35,15 @@ SUBSYSTEM=="hidraw", KERNELS=="*:046D:*", TAG+="uaccess"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0fd9", TAG+="uaccess"
 SUBSYSTEM=="hidraw", KERNELS=="*:0FD9:*", TAG+="uaccess"
 
+# TourBox controllers (a USB CDC serial port, not hidraw).
+#
+# A serial node is root:dialout 0660, and a desktop user is not in dialout by
+# default, so a TourBox enumerated and then refused to open. Matched on the
+# vendor *and* product id together, never the vendor alone: c251 is Keil's id,
+# which many unrelated boards ship under, and a serial port is not something to
+# hand out on a guess. The pair is the one `roadie-tourbox` itself recognises.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="c251", ATTRS{idProduct}=="2005", TAG+="uaccess"
+
 # QMK keyboards and macro pads with VIA enabled are deliberately NOT covered
 # here, and cannot be: VIA is identified by a HID usage page, which udev has no
 # way to match, and the boards that run it come from hundreds of vendors under
