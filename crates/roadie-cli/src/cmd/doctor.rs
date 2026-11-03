@@ -1574,7 +1574,7 @@ mod tests {
             .find(|check| check["state"] == "problem")
             .expect("a problem");
         let steps = problem["steps"].as_array().expect("steps travel with it");
-        assert!(!steps.is_empty());
+        assert_ne!(steps.len(), 0);
         assert!(
             text.contains("0fd9"),
             "the generated rule is in the JSON too"

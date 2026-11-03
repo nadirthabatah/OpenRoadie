@@ -434,7 +434,7 @@ mod tests {
     fn a_write_to_a_monitor_that_is_gone_changes_nothing() {
         let mut model = DeskModel::default();
         model.apply_reading("i2c-7", reading(DisplayControl::Brightness, 70, 100));
-        assert!(model.readings("i2c-7").is_empty());
+        assert_eq!(model.readings("i2c-7").len(), 0);
     }
 
     #[test]
@@ -545,10 +545,10 @@ mod tests {
         assert!(!model.accept_interfaces(first, vec![interface("old", 70)]));
         assert!(!model.accept_controllers(first, vec![controller("old")]));
         assert!(!model.accept_pads(first, vec![pad("old")]));
-        assert!(model.decks().is_empty());
-        assert!(model.interfaces().is_empty());
-        assert!(model.controllers().is_empty());
-        assert!(model.pads().is_empty());
+        assert_eq!(model.decks().len(), 0);
+        assert_eq!(model.interfaces().len(), 0);
+        assert_eq!(model.controllers().len(), 0);
+        assert_eq!(model.pads().len(), 0);
         assert!(model.accept_decks(second, vec![deck("new")]));
         assert_eq!(model.decks()[0].id, "new");
     }

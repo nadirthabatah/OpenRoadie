@@ -402,7 +402,7 @@ label = \"MUTE\"
 ";
         let (edited, removed) = remove_key(source, 0).expect("edited");
         assert!(removed, "the key was there");
-        assert!(parsed(&edited).keys.is_empty());
+        assert_eq!(parsed(&edited).keys.len(), 0);
 
         // Told "removed", someone believes something changed, and the next
         // thing they do is wonder why the deck looks the same.

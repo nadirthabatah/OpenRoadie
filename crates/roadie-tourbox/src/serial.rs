@@ -488,7 +488,7 @@ mod tests {
     fn a_silent_device_is_still_sent_the_setup() {
         let mut port = ScriptedPort::answering(Vec::new());
         let reply = unlock(&mut port).expect("silence is not a fault here");
-        assert!(reply.is_empty());
+        assert_eq!(reply, [] as [u8; 0]);
         let setup_start = port.written.len() - SETUP_MESSAGE.len();
         assert_eq!(&port.written[setup_start..], &SETUP_MESSAGE);
     }

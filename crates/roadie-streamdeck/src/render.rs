@@ -660,7 +660,7 @@ mod tests {
         let filled = solid(mk2, 0, 128, 255).expect("has screens");
         let encoded = key_image(mk2, &filled).expect("encodes");
         let packets = crate::image::key_image_packets(mk2, 0, &encoded).expect("frames");
-        assert!(!packets.is_empty());
+        assert_ne!(packets.len(), 0);
         assert_eq!(
             packets.last().expect("at least one packet")[3],
             1,

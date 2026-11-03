@@ -357,11 +357,12 @@ mod tests {
             workflow_editor_seed(Some(&Action::Workflow(steps.clone()))),
             steps
         );
-        assert!(
+        assert_eq!(
             workflow_editor_seed(Some(&Action::RunAppleScript(
                 "display dialog \"Hello\"".into()
             )))
-            .is_empty()
+            .len(),
+            0
         );
     }
 }

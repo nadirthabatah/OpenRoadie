@@ -549,7 +549,7 @@ mod tests {
 
     #[test]
     fn nothing_attached_chooses_nothing() {
-        assert!(super::choose(&[]).is_empty());
+        assert_eq!(super::choose(&[]), [] as [usize; 0]);
     }
 
     #[test]
@@ -698,8 +698,14 @@ mod tests {
         let mut session = Session::with_transport(mk2(), Box::new(scripted));
 
         assert_eq!(session.next_events().await.expect("report").len(), 1);
-        assert!(session.next_events().await.expect("report").is_empty());
-        assert!(session.next_events().await.expect("report").is_empty());
+        assert_eq!(
+            session.next_events().await.expect("report"),
+            [] as [roadie_streamdeck::report::KeyEvent; 0]
+        );
+        assert_eq!(
+            session.next_events().await.expect("report"),
+            [] as [roadie_streamdeck::report::KeyEvent; 0]
+        );
     }
 
     #[tokio::test]

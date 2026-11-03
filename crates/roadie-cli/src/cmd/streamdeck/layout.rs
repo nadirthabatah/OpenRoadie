@@ -245,7 +245,7 @@ mod tests {
     #[test]
     fn an_empty_layout_is_valid_and_changes_nothing() {
         let layout = parse("").expect("valid");
-        assert!(layout.keys.is_empty());
+        assert_eq!(layout.keys.len(), 0);
         assert_eq!(layout.brightness, None);
         layout.validate(mk2()).expect("valid");
     }
@@ -396,10 +396,11 @@ mod tests {
             "#,
         )
         .expect("parses");
-        assert!(
+        assert_eq!(
             crate::profile::audit_serializable(&layout)
                 .expect("serializes")
-                .is_empty()
+                .len(),
+            0
         );
     }
 

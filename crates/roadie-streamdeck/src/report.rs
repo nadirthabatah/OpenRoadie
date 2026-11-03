@@ -400,7 +400,7 @@ mod tests {
 
         // Holding the same key produces nothing at all.
         let still_down = decode_key_states(mk2(), &gen2_report(&[3])).expect("a valid report");
-        assert!(still_down.changes_since(&one_down).is_empty());
+        assert_eq!(still_down.changes_since(&one_down).len(), 0);
 
         // Letting go produces exactly one release.
         let events = idle.changes_since(&still_down);

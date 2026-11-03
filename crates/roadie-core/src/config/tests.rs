@@ -548,7 +548,7 @@ fn dpi_presets_roundtrip_per_device() {
         parsed.dpi_presets("4082d"),
         vec![Dpi::new(400), Dpi::new(1600)]
     );
-    assert!(parsed.dpi_presets("unknown").is_empty());
+    assert_eq!(parsed.dpi_presets("unknown").len(), 0);
 }
 
 #[test]
@@ -1343,7 +1343,7 @@ fn gesture_state_roundtrips_through_shapes_without_the_owner_field() {
         parsed.is_gesture_mode("2b042", ButtonId::GestureButton),
         "the dedicated button's default gesture mode is untouched by Back's promotion"
     );
-    assert!(parsed.gesture_mode_buttons("4082d").is_empty());
+    assert_eq!(parsed.gesture_mode_buttons("4082d").len(), 0);
 
     let body = toml::to_string_pretty(&cfg).expect("serialize");
     assert!(!body.contains("gesture_owner"), "got: {body}");
@@ -1513,7 +1513,7 @@ gesture_owner = \"Off\"
 
     let cfg = Config::load_from_path(&path).expect("load");
     assert!(!cfg.is_gesture_mode("2b042", ButtonId::GestureButton));
-    assert!(cfg.gesture_mode_buttons("2b042").is_empty());
+    assert_eq!(cfg.gesture_mode_buttons("2b042").len(), 0);
     assert_eq!(
         cfg.bindings_for("2b042").get(&ButtonId::GestureButton),
         Some(&Binding::Single(default_binding(ButtonId::GestureButton)))

@@ -42,7 +42,7 @@ fn a_continuous_feature_lists_no_values() {
     let caps = Capabilities::parse_str(DELL).unwrap();
 
     let brightness = caps.entry(Feature::Brightness).unwrap();
-    assert!(brightness.values.is_empty());
+    assert_eq!(brightness.values, [] as [u8; 0]);
 }
 
 #[test]

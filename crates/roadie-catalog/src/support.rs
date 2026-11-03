@@ -694,7 +694,7 @@ mod tests {
             "a driver was added to the enum without being added here"
         );
         for (index, driver) in drivers.iter().enumerate() {
-            assert!(!driver.what_it_configures().is_empty());
+            assert_ne!(driver.what_it_configures(), "");
             assert!(driver.command().starts_with("roadie "));
             assert!(
                 drivers[..index]

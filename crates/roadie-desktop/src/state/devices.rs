@@ -1302,7 +1302,7 @@ mod tests {
             &Config::default(),
         );
 
-        assert!(list.is_empty());
+        assert_eq!(list.len(), 0);
     }
 
     #[test]
@@ -1355,7 +1355,7 @@ mod tests {
             &HashSet::new(),
             &Config::default(),
         );
-        assert!(list.is_empty());
+        assert_eq!(list.len(), 0);
         append_offline_known(
             &mut list,
             [("receiver:aabb:slot:1", &id)].into_iter(),
@@ -1389,7 +1389,7 @@ mod tests {
             &HashSet::new(),
             &config,
         );
-        assert!(list.is_empty());
+        assert_eq!(list.len(), 0);
 
         append_offline_known(
             &mut list,

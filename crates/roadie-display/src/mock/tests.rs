@@ -153,7 +153,7 @@ fn a_silent_panel_returns_nothing() {
         .with_feature(0x10, 50, 100)
         .with_fault(Fault::Silent);
     let bytes = exchange(&mut panel, Request::Get(Feature::Brightness));
-    assert!(bytes.is_empty());
+    assert_eq!(bytes, [] as [u8; 0]);
 }
 
 #[test]
