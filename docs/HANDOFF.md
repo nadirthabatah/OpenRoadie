@@ -1049,10 +1049,21 @@ Four findings worth keeping:
   `streamdeck verify`. The TourBox Elite decoded every control without a
   protocol error: knob, dial and scroll wheel both ways, scroll wheel and
   dial presses, top, tall, short, C1 and C2.
-- **`streamdeck watch` cannot choose a deck.** `open_preferred` takes the
-  first collection Windows lists, so with a Mini and an XL attached it
-  opened the Mini, while `verify` in the same minute opened the XL. A
-  `--device` selector is the fix; not done here.
+- **Two of a kind now has to be chosen, never guessed.** `open_preferred`
+  took the first collection Windows listed, so with a Mini and an XL
+  attached `watch` opened the Mini while `verify` in the same minute opened
+  the XL. Nadir's rule, stated at the desk: whenever several attached
+  devices share a backend, every surface lists them all and lets you
+  choose. `roadie-cli/src/choose.rs` is that rule for the command line,
+  taken from `roadie audio`, which had it first: `--device` matches part of
+  a name, model or serial; one device in reach is used; several are
+  refused with each named and a short word to type back ("Mini", not a
+  fourteen-character serial read letter by letter). `roadie streamdeck` and
+  `roadie via` use it, verified on this desk with `--device xl`. The GUI
+  already drew one card per device and MCP already required a `deck`, so
+  neither needed changing. Audio, display, light and the Logitech `diag`
+  commands each still carry their own matcher; moving them onto `choose`
+  is the obvious next step.
 - **Logi Options+ was uninstalled** at Nadir's request, with its plugin
   service. After it was gone, the MX Mechanical and MX Master 3S both
   answered on HID++: battery, DPI 1000 to 1050 and back, SmartShift ratchet
