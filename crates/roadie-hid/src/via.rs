@@ -158,6 +158,13 @@ struct HostTransport {
 #[async_trait]
 impl ViaTransport for HostTransport {
     async fn write_output_report(&mut self, report: &[u8]) -> Result<(), BackendError> {
+        // Windows reserves byte zero for a report ID, even for QMK's
+        // unnumbered raw reports. async-hid removes it on reads but does not
+        // insert it on writes; without it Windows consumes the VIA command.
+        #[cfg(target_os = "windows")]
+        let framed = windows_output_report(report);
+        #[cfg(target_os = "windows")]
+        let report = framed.as_slice();
         self.writer
             .write_output_report(report)
             .await
@@ -170,6 +177,15 @@ impl ViaTransport for HostTransport {
             .await
             .map_err(crate::transport::backend_error)
     }
+}
+
+/// Frame an unnumbered VIA payload for Windows' HID output buffer.
+#[cfg(target_os = "windows")]
+fn windows_output_report(payload: &[u8]) -> Vec<u8> {
+    let mut report = Vec::with_capacity(payload.len() + 1);
+    report.push(0);
+    report.extend_from_slice(payload);
+    report
 }
 
 /// An open conversation with one VIA device.
@@ -375,6 +391,22 @@ mod tests {
     use roadie_via::identity::REPORT_LEN;
 
     use super::{MAX_SCAN_EDGE, MAX_STRAY_REPORTS, Session, ViaTransport, scan_edge};
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn windows_output_keeps_the_via_command_after_report_id_zero() {
+        // Literal protocol query and Windows wire buffer: the missing zero
+        // made the real Cybrix 16 time out instead of reporting protocol 12.
+        let payload = [
+            1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0,
+        ];
+        let expected = [
+            0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0,
+        ];
+        assert_eq!(super::windows_output_report(&payload), expected);
+    }
 
     /// A device that answers from a script.
     ///
