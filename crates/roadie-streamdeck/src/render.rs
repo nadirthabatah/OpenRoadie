@@ -11,6 +11,7 @@
 //! panel is mounted at. Get the rotation wrong and every key is upside down,
 //! which is the most likely visible symptom of a wrong catalogue entry.
 
+use image::codecs::bmp::BmpEncoder;
 use image::codecs::jpeg::JpegEncoder;
 use image::{DynamicImage, ExtendedColorType, ImageEncoder as _, Rgb, RgbImage};
 
@@ -34,37 +35,42 @@ const QUALITY: u8 = 90;
 /// # Errors
 ///
 /// - [`ProtocolError::ScreenlessModel`] if the model has no key screens.
-/// - [`ProtocolError::ImageFramingUnsupported`] for a screen format this
-///   function does not encode yet (gen 1's bitmaps).
 /// - [`ProtocolError::ImageEncoding`] if the encoder itself fails.
 pub fn key_image(model: &Model, picture: &DynamicImage) -> Result<Vec<u8>, ProtocolError> {
     let screens = model
         .screens
         .ok_or(ProtocolError::ScreenlessModel { model: model.name })?;
-    if screens.format != KeyFormat::Jpeg {
-        return Err(ProtocolError::ImageFramingUnsupported { model: model.name });
-    }
 
     let size = u32::from(screens.size_px);
     let scaled = fit(picture, size);
     let oriented = match screens.rotation {
         ImageRotation::None => scaled,
-        ImageRotation::Quarter => scaled.rotate90(),
+        ImageRotation::Transpose => scaled.rotate90().fliph(),
         ImageRotation::Half => scaled.rotate180(),
     };
 
     let rgb = oriented.to_rgb8();
     let mut encoded = Vec::new();
-    JpegEncoder::new_with_quality(&mut encoded, QUALITY)
-        .write_image(
+    let written = match screens.format {
+        KeyFormat::Jpeg => JpegEncoder::new_with_quality(&mut encoded, QUALITY).write_image(
             rgb.as_raw(),
             rgb.width(),
             rgb.height(),
             ExtendedColorType::Rgb8,
-        )
-        .map_err(|error| ProtocolError::ImageEncoding {
-            detail: error.to_string(),
-        })?;
+        ),
+        // 24-bit, bottom-up, a 54-byte header: what both reference drivers
+        // hand a gen 1 deck, since the image crate writes RGB bitmaps exactly
+        // as Pillow does.
+        KeyFormat::Bmp => BmpEncoder::new(&mut encoded).write_image(
+            rgb.as_raw(),
+            rgb.width(),
+            rgb.height(),
+            ExtendedColorType::Rgb8,
+        ),
+    };
+    written.map_err(|error| ProtocolError::ImageEncoding {
+        detail: error.to_string(),
+    })?;
     Ok(encoded)
 }
 
@@ -352,13 +358,14 @@ mod tests {
     }
 
     #[test]
-    fn gen1_bitmaps_are_refused_rather_than_encoded_as_jpeg() {
+    fn gen1_keys_are_encoded_as_bitmaps_never_as_jpeg() {
+        // The original's bitmap is encoded; it is its framing that is still
+        // refused, in `crate::image`, which is where its unknown lives.
         let original = model(0x0060);
         let any = DynamicImage::ImageRgb8(RgbImage::from_pixel(8, 8, Rgb([0, 0, 0])));
-        assert!(matches!(
-            key_image(original, &any).expect_err("gen 1 wants a bitmap"),
-            ProtocolError::ImageFramingUnsupported { .. }
-        ));
+        let encoded = key_image(original, &any).expect("gen 1 encodes a bitmap");
+        assert_eq!(&encoded[..2], b"BM");
+        assert_eq!(encoded.len(), 54 + 72 * 72 * 3);
     }
 
     #[test]
@@ -614,6 +621,51 @@ mod tests {
             corner(10, 10) < 60,
             "and the original top-left must now be dark"
         );
+    }
+
+    #[test]
+    fn a_mini_key_is_an_80_pixel_24_bit_bitmap_of_the_size_the_drivers_send() {
+        let mini = model(0x0063);
+        let encoded = key_image(mini, &DynamicImage::ImageRgb8(RgbImage::new(10, 10)))
+            .expect("the Mini encodes");
+        assert_eq!(&encoded[..2], b"BM");
+        assert_eq!(encoded.len(), 19_254, "54-byte header and 80 × 80 × 3");
+        assert_eq!(
+            u32::from_le_bytes([encoded[10], encoded[11], encoded[12], encoded[13]]),
+            54
+        );
+        let width = i32::from_le_bytes([encoded[18], encoded[19], encoded[20], encoded[21]]);
+        let height = i32::from_le_bytes([encoded[22], encoded[23], encoded[24], encoded[25]]);
+        assert_eq!((width, height), (80, 80), "positive height: bottom-up rows");
+        assert_eq!(u16::from_le_bytes([encoded[28], encoded[29]]), 24);
+    }
+
+    #[test]
+    fn the_mini_is_mirrored_across_its_diagonal_not_turned() {
+        // A mark at the top right must land at the bottom left. A plain
+        // quarter turn — what the catalogue said before — puts it at the
+        // bottom right, which on the device is every key shown mirrored.
+        let mini = model(0x0063);
+        let mut marked = RgbImage::from_pixel(80, 80, Rgb([0, 0, 0]));
+        for y in 0..20 {
+            for x in 60..80 {
+                marked.put_pixel(x, y, Rgb([255, 255, 255]));
+            }
+        }
+        let encoded = key_image(mini, &DynamicImage::ImageRgb8(marked)).expect("encodes");
+        let decoded = image::load_from_memory(&encoded)
+            .expect("re-reads")
+            .to_rgb8();
+        let bright = |x: u32, y: u32| decoded.get_pixel(x, y).0[0] > 200;
+        assert!(
+            bright(10, 70),
+            "the top-right mark lands at the bottom left"
+        );
+        assert!(
+            !bright(70, 70),
+            "not at the bottom right, as a quarter turn would put it"
+        );
+        assert!(!bright(70, 10), "and no longer at the top right");
     }
 
     /// The quality setting must actually reach the encoder. It did not once:

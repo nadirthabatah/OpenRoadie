@@ -19,11 +19,12 @@ render = ["dep:image"]
 [dependencies]
 thiserror = { workspace = true }
 image = { version = "0.25", default-features = false, features = [
+    "bmp",
     "jpeg",
 ], optional = true }
 
 [dev-dependencies]
-image = { version = "0.25", default-features = false, features = ["jpeg"] }
+image = { version = "0.25", default-features = false, features = ["bmp", "jpeg"] }
 
 [lints]
 workspace = true

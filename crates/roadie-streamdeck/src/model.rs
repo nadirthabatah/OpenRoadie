@@ -42,10 +42,36 @@ pub enum ImageFormat {
 pub enum ImageRotation {
     /// Upload the image as-is.
     None,
-    /// Rotate a quarter turn clockwise.
-    Quarter,
+    /// Mirror across the diagonal from top left to bottom right, so the
+    /// pixel at column x, row y lands at column y, row x.
+    ///
+    /// The Mini's panel. This was catalogued as a plain quarter turn, which
+    /// would have shown every key mirrored; two independent drivers agree on
+    /// the transpose, reached by different routes — a quarter turn clockwise
+    /// then a left-right flip in one, a quarter turn anticlockwise then a
+    /// top-bottom flip in the other.
+    Transpose,
     /// Rotate a half turn — equivalent to flipping both axes.
     Half,
+}
+
+/// How an encoded key image is cut into output reports.
+///
+/// Not derivable from [`Generation`]: the two gen 1 models share a codec and
+/// a header shape but page differently, and a page counter one off is an
+/// image that never appears.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ImageFraming {
+    /// 1024-byte reports, an 8-byte header, a 16-bit page counted from 0 —
+    /// every gen 2 model.
+    Gen2,
+    /// 1024-byte reports, a 16-byte header, an 8-bit page counted from 0,
+    /// and the key counted from 1 — the Mini.
+    Gen1Mini,
+    /// 8191-byte reports carrying the image in two halves, pages counted
+    /// from 1 — the original Stream Deck. Not encoded: there is none on this
+    /// project's desk to confirm it against.
+    Gen1Original,
 }
 
 /// The order in which a model reports its keys in an input report.
@@ -106,6 +132,8 @@ pub struct KeyScreens {
     pub size_px: u16,
     /// Rotation to apply before upload.
     pub rotation: ImageRotation,
+    /// How the encoded image is cut into reports.
+    pub framing: ImageFraming,
 }
 
 /// One Stream Deck model.
@@ -207,6 +235,7 @@ pub const MODELS: &[Model] = &[
             format: ImageFormat::Bmp,
             size_px: 72,
             rotation: ImageRotation::Half,
+            framing: ImageFraming::Gen1Original,
         }),
         dials: 0,
     },
@@ -222,7 +251,8 @@ pub const MODELS: &[Model] = &[
         screens: Some(KeyScreens {
             format: ImageFormat::Bmp,
             size_px: 80,
-            rotation: ImageRotation::Quarter,
+            rotation: ImageRotation::Transpose,
+            framing: ImageFraming::Gen1Mini,
         }),
         dials: 0,
     },
@@ -239,6 +269,7 @@ pub const MODELS: &[Model] = &[
             format: ImageFormat::Jpeg,
             size_px: 72,
             rotation: ImageRotation::Half,
+            framing: ImageFraming::Gen2,
         }),
         dials: 0,
     },
@@ -255,6 +286,7 @@ pub const MODELS: &[Model] = &[
             format: ImageFormat::Jpeg,
             size_px: 72,
             rotation: ImageRotation::Half,
+            framing: ImageFraming::Gen2,
         }),
         dials: 0,
     },
@@ -271,6 +303,7 @@ pub const MODELS: &[Model] = &[
             format: ImageFormat::Jpeg,
             size_px: 96,
             rotation: ImageRotation::Half,
+            framing: ImageFraming::Gen2,
         }),
         dials: 0,
     },
@@ -287,6 +320,7 @@ pub const MODELS: &[Model] = &[
             format: ImageFormat::Jpeg,
             size_px: 120,
             rotation: ImageRotation::None,
+            framing: ImageFraming::Gen2,
         }),
         dials: 4,
     },
