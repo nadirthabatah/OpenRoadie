@@ -1064,6 +1064,23 @@ Four findings worth keeping:
   neither needed changing. Audio, display, light and the Logitech `diag`
   commands each still carry their own matcher; moving them onto `choose`
   is the obvious next step.
+- **The Mini shows pictures now, confirmed by photograph.** Gen 1 images
+  were refused outright before. Two drivers (python-elgato-streamdeck and
+  the Rust elgato-streamdeck crate) agree on its framing and on its panel
+  being a *transpose*, where the catalogue said a quarter turn, which would
+  have mirrored every key. The first photo, at 80 percent, looked garbled;
+  it was glare, and the way to tell was a set of test patterns at 40
+  percent — solid red, green and blue, a top half, a left half and a corner
+  square — every one exactly where it belonged. The real labels then showed
+  two renderer defects the XL had hidden: short words split to be drawn
+  bigger ("MU" over "TE"), and text drawn to the edge, where the keycap's
+  curve took the tops of letters. A word is now split only when it fits
+  whole at no scale, and labels keep a margin of a tenth of the key. Test
+  patterns before labels is the order to keep: a pattern says which of
+  transfer, orientation and drawing is wrong, and a label cannot.
+- **The XL briefly disappears from enumeration** right after another
+  process releases it — twice this sitting, each time gone on a retry a
+  few seconds later, with no PnP disconnect logged. Not chased yet.
 - **Logi Options+ was uninstalled** at Nadir's request, with its plugin
   service. After it was gone, the MX Mechanical and MX Master 3S both
   answered on HID++: battery, DPI 1000 to 1050 and back, SmartShift ratchet
