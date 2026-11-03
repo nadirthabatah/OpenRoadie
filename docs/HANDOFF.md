@@ -1043,6 +1043,16 @@ Four findings worth keeping:
   write, through `Pacer`), and the monitor was named `display-1` (the EDID
   is now read from the registry via `EnumDisplayDevicesW`). Verified: named
   "RTK HG560T34", brightness 90 and back to 100, each read back.
+- **Presses, with Nadir at the desk.** With Logi Options+ gone, Stream Deck
+  presses arrive on Windows: the Mini's keys 0, 1 and 5 decoded to the right
+  rows and columns, and the XL's top-left key read as row 1, column 1 under
+  `streamdeck verify`. The TourBox Elite decoded every control without a
+  protocol error: knob, dial and scroll wheel both ways, scroll wheel and
+  dial presses, top, tall, short, C1 and C2.
+- **`streamdeck watch` cannot choose a deck.** `open_preferred` takes the
+  first collection Windows lists, so with a Mini and an XL attached it
+  opened the Mini, while `verify` in the same minute opened the XL. A
+  `--device` selector is the fix; not done here.
 - **Logi Options+ was uninstalled** at Nadir's request, with its plugin
   service. After it was gone, the MX Mechanical and MX Master 3S both
   answered on HID++: battery, DPI 1000 to 1050 and back, SmartShift ratchet
