@@ -987,6 +987,51 @@ about it is still unverified against a running kernel.
 Then headsets, MIDI pads, RGB on other brands, and other vendors' mice and
 keyboards.
 
+### 6.13 The first Windows sitting, 2026-11-03
+
+The desk moved to a Windows 11 PC (RTX 5090). First native run, not a
+cross-compile. What answered with no vendor software involved: both Stream
+Decks (XL brightness and key painting verified; presses not yet, see below),
+the Key Light Neo on USB (on, off), the TourBox Elite on COM3 (port opens,
+handshake runs; no presses yet), the Kiiboom Cybrix 16 over VIA (protocol 12,
+keymap reads — only after the report-ID fix in `roadie-hid/src/via.rs`, since
+Windows needs byte zero on every output report), and the Vocaster Two (gain
+written, read back, restored on input 2).
+
+Four findings worth keeping:
+
+- **The Vocaster needed a GUID, not a driver.** Windows binds Microsoft's
+  own WinUSB to interface 3, but the device names no interface GUID, so no
+  device interface is ever published and `nusb` cannot open it. Writing
+  `DeviceInterfaceGUIDs` into that node's `Device Parameters` and restarting
+  only that node fixes it. `roadie audio prepare` does exactly that, behind
+  one UAC prompt; the claim error now names that command. Verified end to
+  end on this desk: GUID removed, the error named the command, `prepare`
+  fixed it, `status` read both inputs.
+- **The local toolchain is 1.99 and the pin is `stable`**, so CI will meet
+  what this PC met: a deprecated `fetch_update` in `roadie-hidpp` and
+  `double_must_use` on every `#[async_trait]` method in `roadie-hid` and
+  `roadie-cli`. Pre-existing, not from this sitting; its own fix.
+- **Smart App Control blocks every freshly built binary.** It was on here, so
+  build scripts, proc-macro DLLs and a rebuilt `roadie.exe` were all refused
+  (os error 4551, Code Integrity event 3077). Nadir had it switched off on
+  2026-11-03 (`VerifiedAndReputablePolicyState` = 0), after which everything
+  built and ran. It is still a release problem: an unsigned
+  Windows build will not start for any user who has it on, so Windows
+  releases need code signing (SignPath Foundation signs open-source projects
+  free).
+- **Logi Options+ is installed and running on this PC.** On macOS it is what
+  swallowed Stream Deck presses; expect the same here until it is quit.
+- **The monitors.** Windows draws only to the LG TV over HDMI, which speaks
+  CEC rather than DDC, as on the Mac. The USB-C monitor shows up only as two
+  "USB Billboard" devices — alt-mode never negotiated, so no video at all on
+  that port. Also, the Windows display backend names a monitor `display-1`
+  where `WmiMonitorID` knows "LG TV SSCR2"; worth fixing.
+
+The MX Mechanical and MX Master 3S were reported offline by the Bolt
+receiver (asleep or on another Easy-Switch channel), so HID++ on Windows is
+still unverified past the receiver.
+
 ## 7. What a session can do with nobody at the desk
 
 Nadir travels, and a session that stalls waiting for a monitor to be plugged in
