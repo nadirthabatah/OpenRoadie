@@ -133,6 +133,10 @@ fn flatten_onto_black(picture: &DynamicImage) -> RgbImage {
 /// Blank rows between lines of a label, in glyph-scale units.
 const LINE_GAP: usize = 2;
 
+/// The margin a label keeps on every side, as a fraction of the key: a
+/// tenth, which is 8 pixels on a Mini's 80 and 9 on a 96-pixel key.
+const MARGIN_DIVISOR: usize = 10;
+
 /// Largest scale a label is drawn at, so a one-character label does not
 /// become a single enormous letter filling the whole key.
 const MAX_SCALE: usize = 6;
@@ -191,13 +195,20 @@ pub fn label(
 /// Pick the largest scale at which `text` wraps into `size` pixels, and the
 /// lines it wraps into.
 ///
+/// Two rules, both from a photograph of a Mini on 2026-11-03. **A word is
+/// split only when it fits whole at no scale at all**: "MUTE" drawn as "MU"
+/// over "TE" at the larger size read worse than "MUTE" at the smaller one,
+/// so every scale that keeps words whole is tried before any that breaks
+/// one. And **text keeps a margin** of a tenth of the key on every side,
+/// because a keycap's curved edge hides the outermost pixels — the tops of
+/// "MUTE" and "NEXT" were lost to it.
+///
 /// Falls back to scale 1 when nothing fits, so an over-long label is drawn
 /// small rather than not at all — showing something legible-if-cramped beats
 /// showing a blank key.
 fn layout(text: &str, size: usize) -> (usize, Vec<String>) {
-    let mut smallest = (1, wrap(text, columns(size, 1)));
-    for scale in (1..=MAX_SCALE).rev() {
-        let lines = wrap(text, columns(size, scale));
+    let room = size - 2 * (size / MARGIN_DIVISOR);
+    let fits = |scale: usize, lines: &[String]| {
         let line_height = (font::GLYPH_HEIGHT + LINE_GAP) * scale;
         let height = lines.len() * line_height - LINE_GAP * scale;
         let widest = lines
@@ -205,14 +216,26 @@ fn layout(text: &str, size: usize) -> (usize, Vec<String>) {
             .map(|line| font::text_width(line) * scale)
             .max()
             .unwrap_or(0);
-        if height <= size && widest <= size {
-            return (scale, lines);
-        }
-        if scale == 1 {
-            smallest = (1, lines);
+        height <= room && widest <= room
+    };
+    let longest_word = text
+        .split_whitespace()
+        .map(|word| word.chars().count())
+        .max()
+        .unwrap_or(0);
+    for whole_words in [true, false] {
+        for scale in (1..=MAX_SCALE).rev() {
+            let columns = columns(room, scale);
+            if whole_words && longest_word > columns {
+                continue;
+            }
+            let lines = wrap(text, columns);
+            if fits(scale, &lines) {
+                return (scale, lines);
+            }
         }
     }
-    smallest
+    (1, wrap(text, columns(room, 1)))
 }
 
 /// How many glyphs fit across a key at `scale`.
@@ -331,6 +354,41 @@ mod tests {
 
     fn model(product_id: u16) -> &'static crate::model::Model {
         identify(ELGATO_VENDOR_ID, product_id).expect("catalogued")
+    }
+
+    #[test]
+    fn a_short_word_stays_whole_on_a_mini_rather_than_split_to_be_bigger() {
+        // Every label photographed split on the Mini on 2026-11-03.
+        for word in ["MUTE", "PLAY", "PREV", "NEXT"] {
+            let (_, lines) = super::layout(word, 80);
+            assert_eq!(lines, [word], "{word} was split");
+        }
+        let (_, lines) = super::layout("VOL DOWN", 80);
+        assert_eq!(lines, ["VOL", "DOWN"]);
+    }
+
+    #[test]
+    fn a_word_too_long_to_fit_whole_is_still_broken_rather_than_overflowing() {
+        let (scale, lines) = super::layout("ABCDEFGHIJKLMNOPQRSTUVWXYZ", 80);
+        assert_eq!(scale, 1);
+        assert!(lines.len() > 1, "{lines:?}");
+    }
+
+    #[test]
+    fn a_label_keeps_clear_of_the_edge_a_keycap_hides() {
+        let mini = model(0x0063);
+        for text in ["MUTE", "NEXT", "VOL UP", "W", "ABCDEFGHIJKLMNOPQRSTUVWXYZ"] {
+            let drawn = super::label(mini, text, (255, 255, 255), (0, 0, 0))
+                .expect("labels")
+                .to_rgb8();
+            for (x, y, pixel) in drawn.enumerate_pixels() {
+                let in_margin = x < 8 || y < 8 || x >= 72 || y >= 72;
+                assert!(
+                    !(in_margin && pixel.0[0] > 0),
+                    "{text:?} draws at ({x}, {y}), inside the 8-pixel margin"
+                );
+            }
+        }
     }
 
     #[test]
