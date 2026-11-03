@@ -27,6 +27,16 @@ ignore = [
     # (tokio-serde 0.9 is current and binds bincode 1.x). Revisit if tarpc
     # adopts another codec — which would be a breaking protocol change.
     { id = "RUSTSEC-2025-0141", reason = "tarpc's wire codec; unmaintained-by-choice, no upgrade path" },
+    # zbus_names, zvariant and zvariant_derive were folded into zbus 6 and
+    # are maintenance notices, not vulnerabilities. zbus 6 also removed the
+    # blocking API both Linux call sites use (roadie-hook's GNOME Shell
+    # frontmost poll, roadie-inject's MPRIS), and gpui_linux keeps zbus 5 in
+    # the shipped app regardless, through accesskit_unix, ashpd, oo7 and
+    # notify-rust — so moving only ours would ship two zbus majors and change
+    # Linux runtime behaviour for no audit gain. Revisit when gpui moves to 6.
+    { id = "RUSTSEC-2026-0370", reason = "zvariant: merged into zbus 6; gpui_linux still on zbus 5" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names: merged into zbus 6; gpui_linux still on zbus 5" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive: merged into zbus 6; gpui_linux still on zbus 5" },
 ]
 
 [licenses]
