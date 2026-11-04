@@ -22,7 +22,7 @@ use gpui_component::{
     dialog::DialogButtonProps,
     h_flex,
     input::InputState,
-    menu::{DropdownMenu as _, PopupMenu, PopupMenuItem},
+    menu::{PopupMenu, PopupMenuItem},
     tooltip::Tooltip,
     v_flex,
 };
@@ -407,16 +407,21 @@ pub(super) fn device_menu(
 /// The card corner's ellipsis button, opening the same menu the card offers
 /// on right-click.
 pub(super) fn device_menu_button(record: &DeviceRecord, pal: Palette) -> impl IntoElement {
-    Button::new((ElementId::from("device-menu"), record.record_key()))
-        .ghost()
-        .xsmall()
-        .text_color(pal.text_muted)
-        .icon(IconName::Ellipsis)
-        .child(crate::ui::a11y::spoken_name(
-            "name",
-            tr!("More options for %{name}", name => record.display_name.clone()),
-        ))
-        .dropdown_menu_with_anchor(Anchor::TopRight, device_menu(record))
+    let id = (ElementId::from("device-menu"), record.record_key());
+    crate::ui::components::MenuButton::new(
+        id.clone(),
+        Button::new(id)
+            .ghost()
+            .xsmall()
+            .text_color(pal.text_muted)
+            .icon(IconName::Ellipsis)
+            .child(crate::ui::a11y::spoken_name(
+                "name",
+                tr!("More options for %{name}", name => record.display_name.clone()),
+            )),
+        Anchor::TopRight,
+        device_menu(record),
+    )
 }
 
 /// Confirm before forgetting a device: the record, its custom name, and its
@@ -424,9 +429,18 @@ pub(super) fn device_menu_button(record: &DeviceRecord, pal: Palette) -> impl In
 fn open_delete_confirmation(window: &mut Window, cx: &mut App, record_key: String, name: String) {
     window.open_alert_dialog(cx, move |alert, _, _| {
         alert
-            .title(tr!("Delete %{name}?", name => name.clone()))
-            .description(tr!(
-                "This forgets the device and its settings. Reconnect or pair it again to set it up from scratch."
+            // Elements, not strings: the dialog draws a string as text no
+            // screen reader reaches.
+            .title(crate::ui::a11y::heading(
+                "delete-device-title",
+                tr!("Delete %{name}?", name => name.clone()),
+                2,
+            ))
+            .description(crate::ui::a11y::label(
+                "delete-device-description",
+                tr!(
+                    "This forgets the device and its settings. Reconnect or pair it again to set it up from scratch."
+                ),
             ))
             .button_props(
                 DialogButtonProps::default()
@@ -461,11 +475,27 @@ fn open_rename_dialog(
         input.set_value(custom_name, window, cx);
         input
     });
+    let input_for_save = input.clone();
+    let save = std::rc::Rc::new(move |cx: &mut App| {
+        let custom_name = input_for_save.read(cx).value().to_string();
+        AppState::update(cx, |state, cx| {
+            state.set_device_custom_name(&record_key, &custom_name);
+            cx.emit(StateEvent::InventoryChanged);
+        });
+    });
     window.open_dialog(cx, move |dialog, window, cx| {
         input.update(cx, |input, cx| input.focus(window, cx));
+        // The dialog's own title is text no screen reader reaches, and with
+        // `button_props` alone it draws no buttons at all; its close button
+        // has no name. A heading and two named buttons replace all three.
         dialog
             .w(px(420.))
-            .title(tr!("Rename device"))
+            .close_button(false)
+            .title(crate::ui::a11y::heading(
+                "rename-device-title",
+                tr!("Rename device"),
+                2,
+            ))
             .child(
                 v_flex().gap_2().child(control_input(&input)).child(
                     div()
@@ -474,21 +504,31 @@ fn open_rename_dialog(
                         .child(gpui::text!(tr!("Leave blank to use the model name."))),
                 ),
             )
-            .button_props(
-                DialogButtonProps::default()
-                    .ok_text(tr!("Save"))
-                    .cancel_text(tr!("Cancel"))
-                    .show_cancel(true),
+            .footer(
+                gpui_component::dialog::DialogFooter::new()
+                    .child(
+                        crate::ui::components::control_button("rename-device-cancel")
+                            .label(tr!("Cancel"))
+                            .on_click(|_, window, cx| window.close_dialog(cx)),
+                    )
+                    .child(
+                        crate::ui::components::control_button("rename-device-save")
+                            .primary()
+                            .label(tr!("Save"))
+                            .on_click({
+                                let save = save.clone();
+                                move |_, window, cx| {
+                                    save(cx);
+                                    window.close_dialog(cx);
+                                }
+                            }),
+                    ),
             )
+            // Enter in the name field.
             .on_ok({
-                let input = input.clone();
-                let record_key = record_key.clone();
+                let save = save.clone();
                 move |_, _, cx| {
-                    let custom_name = input.read(cx).value().to_string();
-                    AppState::update(cx, |state, cx| {
-                        state.set_device_custom_name(&record_key, &custom_name);
-                        cx.emit(StateEvent::InventoryChanged);
-                    });
+                    save(cx);
                     true
                 }
             })

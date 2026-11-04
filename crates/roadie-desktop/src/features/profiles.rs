@@ -300,9 +300,14 @@ fn open_button_remove_confirmation(window: &mut Window, cx: &mut App, profile: &
     let question = remove_profile_question(profile);
     window.open_alert_dialog(cx, move |alert, _, _| {
         alert
-            .title(question.clone())
-            .description(tr!(
-                "This deletes the custom button bindings in this profile. Default bindings are not affected."
+            // Elements, not strings: the dialog draws a string as text no
+            // screen reader reaches.
+            .title(crate::ui::a11y::heading("remove-profile-title", question.clone(), 2))
+            .description(crate::ui::a11y::label(
+                "remove-profile-description",
+                tr!(
+                    "This deletes the custom button bindings in this profile. Default bindings are not affected."
+                ),
             ))
             .button_props(
                 DialogButtonProps::default()
@@ -328,7 +333,11 @@ fn open_action_ring_remove_confirmation(
     let question = remove_profile_question(profile);
     window.open_alert_dialog(cx, move |alert, _, _| {
         alert
-            .title(question.clone())
+            .title(crate::ui::a11y::heading(
+                "remove-ring-profile-title",
+                question.clone(),
+                2,
+            ))
             .button_props(
                 DialogButtonProps::default()
                     .ok_text(tr!("Remove profile"))

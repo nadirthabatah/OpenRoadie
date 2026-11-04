@@ -13,6 +13,7 @@ use gpui_base::Button as BaseButton;
 use gpui_component::{
     Disableable, Icon, IconName, Selectable, Sizable, Size, h_flex,
     input::{Input, InputState},
+    menu::PopupMenu,
     searchable_list::SearchableListDelegate,
     select::{Select, SelectState},
     v_flex,
@@ -622,6 +623,130 @@ impl RenderOnce for PresetChip {
                 })
             })
             .children(self.children)
+    }
+}
+
+type MenuBuilder =
+    std::rc::Rc<dyn Fn(PopupMenu, &mut Window, &mut gpui::Context<PopupMenu>) -> PopupMenu>;
+
+/// A button that opens a popup menu from the pointer, the keyboard and
+/// assistive technology alike.
+///
+/// gpui-component's `dropdown_menu` opens on a mouse press and nothing else:
+/// Enter and Space did nothing, and the trigger carried no press action, so a
+/// screen reader could not open it either. This keeps the library's menu,
+/// which is itself keyboard-driven and announced, and opens it from a keyed
+/// flag the button's click also sets.
+#[derive(IntoElement)]
+pub(crate) struct MenuButton {
+    id: ElementId,
+    trigger: gpui_component::button::Button,
+    anchor: gpui::Anchor,
+    builder: MenuBuilder,
+}
+
+#[derive(Default)]
+struct MenuButtonState {
+    open: bool,
+    menu: Option<Entity<PopupMenu>>,
+    /// What had focus when the menu opened, the button itself; it gets focus
+    /// back when the menu closes, or Tab has nowhere to start from.
+    restore: Option<gpui::FocusHandle>,
+}
+
+impl MenuButton {
+    pub(crate) fn new(
+        id: impl Into<ElementId>,
+        trigger: gpui_component::button::Button,
+        anchor: gpui::Anchor,
+        builder: impl Fn(PopupMenu, &mut Window, &mut gpui::Context<PopupMenu>) -> PopupMenu + 'static,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            trigger,
+            anchor,
+            builder: std::rc::Rc::new(builder),
+        }
+    }
+}
+
+impl RenderOnce for MenuButton {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| MenuButtonState::default());
+        let open = state.read(cx).open;
+        let builder = self.builder;
+        // The pointer opens the popover itself, on mouse down. A keyboard
+        // click has no mouse down, so it opens it here; an assistive press is
+        // delivered as a mouse down, and having a click at all is what gives
+        // the button a press action to offer.
+        let trigger = self.trigger.on_click({
+            let state = state.clone();
+            move |event, window, cx| {
+                let focused = window.focused(cx);
+                let keyboard = event.is_keyboard();
+                state.update(cx, |state, cx| {
+                    state.restore = focused;
+                    if keyboard {
+                        state.open = true;
+                        cx.notify();
+                    }
+                });
+            }
+        });
+        gpui_component::popover::Popover::new(SharedString::from(format!(
+            "menu-button:{}",
+            self.id
+        )))
+        .appearance(false)
+        .overlay_closable(false)
+        .anchor(self.anchor)
+        .open(open)
+        .on_open_change({
+            let state = state.clone();
+            move |open, _, cx| {
+                state.update(cx, |state, cx| {
+                    state.open = *open;
+                    cx.notify();
+                });
+            }
+        })
+        .trigger(trigger)
+        .content(move |_, window, cx| {
+            // Built once per opening, as the library's dropdown does: the
+            // content closure runs on every render.
+            if let Some(menu) = state.read(cx).menu.clone() {
+                return menu;
+            }
+            let builder = builder.clone();
+            let menu = PopupMenu::build(window, cx, move |menu, window, cx| {
+                builder(menu, window, cx)
+            });
+            gpui::Focusable::focus_handle(menu.read(cx), cx).focus(window, cx);
+            let popover = cx.entity();
+            let dismissed = state.clone();
+            let menu_for_focus = menu.clone();
+            window
+                .subscribe(&menu, cx, move |_, _: &gpui::DismissEvent, window, cx| {
+                    popover.update(cx, |popover, cx| popover.dismiss(window, cx));
+                    let restore = dismissed.update(cx, |state, cx| {
+                        state.open = false;
+                        state.menu = None;
+                        cx.notify();
+                        state.restore.take()
+                    });
+                    // Only when the menu still holds focus: an item that opened
+                    // a dialog has already moved it where it belongs.
+                    let menu_focus = gpui::Focusable::focus_handle(menu_for_focus.read(cx), cx);
+                    if let Some(restore) = restore
+                        && (window.focused(cx).is_none() || menu_focus.contains_focused(window, cx))
+                    {
+                        window.focus(&restore, cx);
+                    }
+                })
+                .detach();
+            state.update(cx, |state, _| state.menu = Some(menu.clone()));
+            menu
+        })
     }
 }
 
