@@ -1219,6 +1219,15 @@ log as `SPEECH OUTPUT`. That found what tree audits could not:
   drawn twice under one parent collides; the light panel's two slider cards
   did. Give such text an explicit id, or leave a caption that repeats a
   control's name unexposed.
+- **A dialog builder runs on every frame.** The rename dialog focused its
+  name field in the builder, so focus moved by Tab came straight back; the
+  field is now focused once, when it opens.
+- **High contrast was checked on screen** with screenshots: forced on
+  Linux and Windows, and turned on from a `HighContrast` GTK theme on
+  Linux. Black or white pages, as designed.
+- **A Linux kernel without the hidraw class** (WSL, containers) made every
+  device list fail with "No such file or directory"; `roadie-hid` now
+  lists no devices there. The CLI's own tests caught it, run in WSL.
 - **Still open, in gpui-component:** its text input names a frame node but
   focuses an inner element with no node, so Tab into any search or text
   field announces the window around it, and inside its dialog Tab does not
