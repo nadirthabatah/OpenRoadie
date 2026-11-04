@@ -78,6 +78,13 @@ impl Attached {
 ///
 /// [`ControlError::Enumeration`] if the host's USB stack cannot be listed at all.
 pub fn attached() -> Result<Vec<Result<Attached>>> {
+    // A Linux kernel with no USB bus (WSL, many containers) has nothing
+    // attached, which `nusb` reports as a missing sysfs directory.
+    #[cfg(target_os = "linux")]
+    if !std::path::Path::new("/sys/bus/usb").exists() {
+        tracing::debug!("no /sys/bus/usb: this kernel exposes no USB devices");
+        return Ok(Vec::new());
+    }
     let devices = nusb::list_devices().map_err(|error| ControlError::Enumeration {
         reason: error.to_string(),
     })?;
