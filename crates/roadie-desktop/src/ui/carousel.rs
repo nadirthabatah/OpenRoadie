@@ -177,6 +177,7 @@ impl Carousel {
                 .when(multi, |this| {
                     this.child(arrow(
                         (id.clone(), "previous").into(),
+                        tr!("Previous"),
                         IconName::ChevronLeft,
                         selected.saturating_sub(1),
                         selected == 0,
@@ -188,6 +189,7 @@ impl Carousel {
                 .when(multi, |this| {
                     this.child(arrow(
                         (id.clone(), "next").into(),
+                        tr!("Next"),
                         IconName::ChevronRight,
                         (selected + 1).min(len - 1),
                         selected + 1 >= len,
@@ -203,6 +205,7 @@ impl Carousel {
 
 fn arrow(
     id: ElementId,
+    name: gpui::SharedString,
     icon: IconName,
     target: usize,
     disabled: bool,
@@ -211,6 +214,8 @@ fn arrow(
 ) -> impl IntoElement {
     Button::new(id)
         .icon(icon)
+        // Icon-only, so the name rides inside where a screen reader finds it.
+        .child(crate::ui::a11y::spoken_name("name", name))
         .ghost()
         .with_size(size)
         .disabled(disabled)
