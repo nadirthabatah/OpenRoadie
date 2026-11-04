@@ -66,16 +66,6 @@ pub fn spoken_name(id: impl Into<ElementId>, name: impl Into<SharedString>) -> i
         .child(Text::new(id.into(), name.into()))
 }
 
-/// "Interface language, English": a setting's name with its current choice,
-/// for a control that cannot say its own value. Just the name when nothing is
-/// chosen.
-pub fn choice(name: SharedString, chosen: Option<SharedString>) -> SharedString {
-    match chosen {
-        Some(chosen) => format!("{name}, {chosen}").into(),
-        None => name,
-    }
-}
-
 /// A named set of controls.
 ///
 /// The fix for buttons that look the same on two devices: a screen reader

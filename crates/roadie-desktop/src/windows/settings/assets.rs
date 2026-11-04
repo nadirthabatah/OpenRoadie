@@ -9,7 +9,8 @@ use crate::ui::components::control_select;
 use super::{
     App, AppState, AssetCommand, AssetControl, AssetSourcePreference, Entity, IconName, IndexPath,
     InteractiveElement, IntoElement, Palette, ParentElement, SelectItem, SelectState, SettingField,
-    SettingGroup, SettingItem, SettingPage, SettingsView, SharedString, StateEvent, Styled, px,
+    SettingGroup, SettingItem, SettingPage, SettingsView, SharedString, StateEvent, Styled, div,
+    px,
 };
 
 #[derive(Clone)]
@@ -67,8 +68,8 @@ pub(super) fn assets_page(
         .item(
             SettingItem::new(
                 tr!("Asset source"),
-                SettingField::render(move |_, _, cx| {
-                    asset_source_select_field(asset_source_select.clone(), cx)
+                SettingField::render(move |_, _, _| {
+                    asset_source_select_field(asset_source_select.clone())
                 }),
             )
             .description(tr!(
@@ -156,23 +157,11 @@ pub(super) fn assets_page(
 )]
 fn asset_source_select_field(
     asset_source_select: Entity<SelectState<Vec<AssetSourceOption>>>,
-    cx: &gpui::App,
-) -> impl IntoElement + use<> {
-    let chosen = asset_source_select
-        .read(cx)
-        .selected_index(cx)
-        .and_then(|ix| asset_source_options().get(ix.row).map(SelectItem::title));
-    // The library select exposes neither a name nor its value; see
-    // `language_select_field`.
-    crate::ui::a11y::group(
-        "asset-source",
-        crate::ui::a11y::choice(tr!("Asset source"), chosen),
-    )
-    .flex_shrink_0()
-    .w(px(220.))
-    .h_6()
-    .child(
+) -> impl IntoElement {
+    div().flex_shrink_0().w(px(220.)).h_6().child(
         control_select(&asset_source_select)
+            // Named for the setting; the select says its own value.
+            .accessibility_label(tr!("Asset source"))
             .w(px(220.))
             .menu_width(px(220.)),
     )
