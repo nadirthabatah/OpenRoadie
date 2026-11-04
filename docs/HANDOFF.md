@@ -1269,6 +1269,16 @@ person on NVDA or Narrator.
   fixed there.
 - **Two OpenRoadie windows confuse a scripted NVDA run:** pick the window
   by process and confirm it is the foreground window before sending keys.
+- **A full Orca keyboard pass on Linux** (home, every mouse tab, Settings
+  page by page, the desk, Add Device) found three gaps, now fixed: the
+  DPI row's "Add" and its icon-only remove buttons said nothing of
+  presets; the Assets buttons were a bare "Refresh", "Clear" and "Open";
+  and AccessKit's Linux adapter drops a combo box's text value, so Orca
+  never heard a dropdown's choice (`a11y::select_name` puts it in the name
+  on Linux only — NVDA reads the value itself). The Linux Permissions page
+  is a status with no Tab stop; Orca's review commands read it.
+- **`/sys/bus/usb` is absent in WSL** as `/sys/class/hidraw` is, and the
+  Focusrite listing failed there the same way; it now lists nothing.
 
 ## 7. What a session can do with nobody at the desk
 
