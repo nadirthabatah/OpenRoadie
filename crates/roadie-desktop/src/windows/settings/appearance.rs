@@ -2,7 +2,7 @@
 
 use super::language::{LanguageOption, language_select_field};
 use gpui::{ElementId, img};
-use roadie_core::config::AppIcon;
+use roadie_core::config::{AppIcon, Contrast};
 
 use super::{
     ActiveTheme, App, AppState, Appearance, Axis, Button, ButtonGroup, Entity, FluentBuilder, Hsla,
@@ -28,27 +28,32 @@ pub(super) fn appearance_page(
     // Titled groups so the sidebar shows them as sub-items (gpui-component
     // renders a page's groups as nested sidebar entries once there's more than
     // one and each is titled). Item titles stay distinct from their group title.
-    let mut theme_group = SettingGroup::new()
-        .title(tr!("Theme"))
-        .item(
-            SettingItem::new(
-                tr!("Appearance mode"),
-                SettingField::render(move |_, _, cx| mode_segment(cx)),
+    let mut theme_group =
+        SettingGroup::new()
+            .title(tr!("Theme"))
+            .item(
+                SettingItem::new(
+                    tr!("Appearance mode"),
+                    SettingField::render(move |_, _, cx| {
+                        crate::ui::a11y::group("appearance-mode", tr!("Appearance mode"))
+                            .child(mode_segment(cx))
+                    }),
+                )
+                .layout(Axis::Vertical)
+                .description(tr!(
+                    "Light and dark use the matching theme; Follow system tracks the OS setting."
+                )),
             )
-            .layout(Axis::Vertical)
-            .description(tr!(
-                "Light and dark use the matching theme; Follow system tracks the OS setting."
-            )),
-        )
-        .item(
-            SettingItem::new(
-                tr!("Color theme"),
-                SettingField::render(move |_, _, cx| {
-                    theme_picker(&view, &theme_search, filter, cx)
-                }),
-            )
-            .layout(Axis::Vertical),
-        );
+            .item(
+                SettingItem::new(
+                    tr!("Color theme"),
+                    SettingField::render(move |_, _, cx| {
+                        crate::ui::a11y::group("color-theme", tr!("Color theme"))
+                            .child(theme_picker(&view, &theme_search, filter, cx))
+                    }),
+                )
+                .layout(Axis::Vertical),
+            );
 
     // Only macOS can wear a chosen icon: Windows embeds one into the executable
     // at build time and Linux installs a fixed one from the package.
@@ -67,18 +72,36 @@ pub(super) fn appearance_page(
 
     let theme_group = theme_group
         .item(
+            SettingItem::new(
+                tr!("High contrast"),
+                SettingField::render(move |_, _, cx| {
+                    crate::ui::a11y::group("contrast-group", tr!("High contrast"))
+                        .child(contrast_segment(cx))
+                }),
+            )
+            .description(tr!(
+                "Black and white with bold borders. Follow system turns it on with the OS setting."
+            )),
+        )
+        .item(
             // Compact control → inline on the right of the label (HIG), unlike the
             // wide thumbnail/grid controls which stack below.
             SettingItem::new(
                 tr!("Corner radius"),
-                SettingField::render(move |_, _, cx| radius_segment(cx)),
+                SettingField::render(move |_, _, cx| {
+                    crate::ui::a11y::group("radius-group", tr!("Corner radius"))
+                        .child(radius_segment(cx))
+                }),
             )
             .description(tr!("Roundness of buttons, cards, and controls.")),
         )
         .item(
             SettingItem::new(
                 tr!("Interface scale"),
-                SettingField::render(move |_, _, cx| scale_segment(cx)),
+                SettingField::render(move |_, _, cx| {
+                    crate::ui::a11y::group("scale-group", tr!("Interface scale"))
+                        .child(scale_segment(cx))
+                }),
             )
             .description(tr!("Scale text and interface spacing.")),
         );
@@ -404,6 +427,34 @@ fn radius_segment(cx: &App) -> ButtonGroup {
         })
 }
 
+/// Follow the OS high-contrast switch, or keep high contrast on.
+fn contrast_segment(cx: &App) -> ButtonGroup {
+    let current =
+        AppState::try_read(cx).map_or_else(Contrast::default, |s| s.app_settings().contrast);
+    let options = [Contrast::System, Contrast::High];
+    ButtonGroup::new("contrast")
+        .outline()
+        .child(
+            Button::new("contrast-system")
+                .label(tr!("Follow system"))
+                .selected(current == Contrast::System),
+        )
+        .child(
+            Button::new("contrast-high")
+                .label(tr!("On"))
+                .selected(current == Contrast::High),
+        )
+        .on_click(move |clicks, _, cx| {
+            if let Some(&ix) = clicks.first() {
+                AppState::update(cx, |state, cx| {
+                    state.set_contrast(options[ix]);
+                    cx.emit(StateEvent::SettingsChanged);
+                });
+                theme::apply_from_settings(None, cx);
+            }
+        })
+}
+
 /// The supported interface-scale presets. Keeping this finite makes every
 /// layout state reviewable and avoids arbitrary values that can render a
 /// window unusable.
@@ -470,7 +521,9 @@ fn theme_picker(
         .when(no_matches, |grid| {
             grid.text_body()
                 .text_color(pal.text_muted)
-                .child(tr!("No themes match “%{query}”.", query => query))
+                .child(gpui::text!(
+                    tr!("No themes match “%{query}”.", query => query)
+                ))
         })
         .when(!no_matches, |grid| {
             grid.flex()

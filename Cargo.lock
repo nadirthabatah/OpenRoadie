@@ -6727,6 +6727,7 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "walkdir",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

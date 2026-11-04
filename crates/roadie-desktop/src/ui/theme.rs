@@ -16,7 +16,7 @@
 use gpui::rgb;
 use gpui::{App, FontWeight, Hsla, Pixels, Rems, Rgba, Styled, Window, hsla, px, relative, rems};
 use gpui_component::{ActiveTheme as _, Theme, ThemeMode, ThemeRegistry};
-use roadie_core::config::{Appearance, UiScale};
+use roadie_core::config::{Appearance, Contrast, UiScale};
 
 use crate::state::AppState;
 
@@ -242,19 +242,29 @@ pub fn palette(cx: &App) -> Palette {
 /// they must be embedded to be selectable).
 const ROADIE_THEME_JSON: &str = include_str!("../../themes/roadie.json");
 
+/// The black-and-white pair worn whenever high contrast is on, in place of
+/// whatever themes the user picked (see [`apply_from_settings`]).
+const HIGH_CONTRAST_THEME_JSON: &str = include_str!("../../themes/high-contrast.json");
+
 // Defines `static UPSTREAM_THEME_JSON: &[&str]` from build-time-embedded copies.
 include!(concat!(env!("OUT_DIR"), "/builtin_themes.rs"));
 
 /// The default brand theme names — slots [`apply_from_settings`] falls back to.
 pub const ROADIE_LIGHT: &str = "OpenRoadie Light";
 pub const ROADIE_DARK: &str = "OpenRoadie Dark";
+/// The high-contrast slots, chosen over the user's themes while contrast is high.
+pub const HIGH_CONTRAST_LIGHT: &str = "OpenRoadie High Contrast Light";
+pub const HIGH_CONTRAST_DARK: &str = "OpenRoadie High Contrast Dark";
 
 /// Register every bundled theme into the [`ThemeRegistry`]. Call once at
 /// startup, after `gpui_component::init` (which seeds the registry global). Our
 /// brand theme loads first; the upstream themes follow.
 pub fn register_builtin_themes(cx: &mut App) {
     let registry = ThemeRegistry::global_mut(cx);
-    for json in std::iter::once(ROADIE_THEME_JSON).chain(UPSTREAM_THEME_JSON.iter().copied()) {
+    for json in [ROADIE_THEME_JSON, HIGH_CONTRAST_THEME_JSON]
+        .into_iter()
+        .chain(UPSTREAM_THEME_JSON.iter().copied())
+    {
         if let Err(error) = registry.load_themes_from_str(json) {
             tracing::warn!(%error, "failed to load a bundled theme");
         }
@@ -265,9 +275,11 @@ fn rem_size(scale: UiScale) -> Pixels {
     px(BASE_REM_SIZE * f32::from(scale.percent()) / 100.)
 }
 
-/// Apply one semantic interface scale to a window.
+/// Apply one semantic interface scale to a window, on top of the operating
+/// system's own text size so a reader who enlarged text everywhere gets it
+/// here too.
 pub(crate) fn apply_scale(window: &mut Window, scale: UiScale) {
-    window.set_rem_size(rem_size(scale));
+    window.set_rem_size(rem_size(scale) * crate::platform::os::text_scale());
 }
 
 /// Apply the stored interface scale to one desktop window.
@@ -295,12 +307,13 @@ pub fn apply_ui_scale(window: &mut Window, cx: &App) {
 /// appearance is read directly and it repaints; pass `None` from a settings
 /// edit (no window in hand) — every open window is refreshed instead.
 pub fn apply_from_settings(window: Option<&mut Window>, cx: &mut App) {
-    let (appearance, light_name, dark_name, radius) = AppState::try_read(cx).map_or_else(
-        || (Appearance::default(), None, None, None),
+    let (appearance, contrast, light_name, dark_name, radius) = AppState::try_read(cx).map_or_else(
+        || (Appearance::default(), Contrast::default(), None, None, None),
         |state| {
             let s = state.app_settings();
             (
                 s.appearance,
+                s.contrast,
                 s.theme_light.clone(),
                 s.theme_dark.clone(),
                 s.ui_radius,
@@ -323,6 +336,18 @@ pub fn apply_from_settings(window: Option<&mut Window>, cx: &mut App) {
     let os_appearance = window
         .as_ref()
         .map_or_else(|| cx.window_appearance(), |w| w.appearance());
+
+    // High contrast replaces the chosen pair outright: no other theme is
+    // guaranteed to keep every text and border legible.
+    let (light_name, dark_name) =
+        if contrast == Contrast::High || crate::platform::os::high_contrast() {
+            (
+                Some(HIGH_CONTRAST_LIGHT.to_owned()),
+                Some(HIGH_CONTRAST_DARK.to_owned()),
+            )
+        } else {
+            (light_name, dark_name)
+        };
 
     // Pull the chosen configs out of the registry before borrowing the Theme
     // mutably (both live as globals).

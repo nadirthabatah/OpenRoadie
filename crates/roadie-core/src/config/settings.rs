@@ -28,6 +28,18 @@ pub enum Appearance {
     Dark,
 }
 
+/// Contrast preference. `System` follows the operating system's high-contrast
+/// setting; `High` keeps the high-contrast theme on regardless of the OS.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Contrast {
+    /// High contrast exactly when the operating system asks for it.
+    #[default]
+    System,
+    /// Always use the high-contrast theme.
+    High,
+}
+
 /// User-selected scale for text and rem-based interface spacing.
 ///
 /// The core stores a semantic choice rather than GPUI pixels; the desktop maps
@@ -264,6 +276,9 @@ pub struct AppSettings {
     /// Light/dark appearance preference. Defaults to following the OS.
     #[serde(default)]
     pub appearance: Appearance,
+    /// High-contrast preference. Defaults to following the OS.
+    #[serde(default)]
+    pub contrast: Contrast,
     /// Text and rem-based interface scale. Defaults to 100%.
     #[serde(default)]
     pub ui_scale: UiScale,
@@ -478,6 +493,7 @@ impl Default for AppSettings {
             language: None,
             thumbwheel_sensitivity: ThumbwheelSensitivity::DEFAULT,
             appearance: Appearance::System,
+            contrast: Contrast::System,
             ui_scale: UiScale::Normal,
             device_view_mode: DeviceViewMode::Grid,
             app_icon: AppIcon::OpenRoadie,
