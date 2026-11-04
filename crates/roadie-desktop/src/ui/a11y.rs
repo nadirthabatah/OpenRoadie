@@ -77,6 +77,18 @@ pub fn group(id: impl Into<ElementId>, name: impl Into<SharedString>) -> gpui::S
     div().id(id).role(Role::Group).aria_label(name.into())
 }
 
+/// A dropdown's accessible name.
+///
+/// AccessKit's Linux adapter drops a combo box's text value, so Orca said the
+/// setting and never its current choice; there the choice rides in the name.
+/// UI Automation reads the value itself, and naming it too would say it twice.
+pub fn select_name(name: SharedString, choice: Option<SharedString>) -> SharedString {
+    match choice {
+        Some(choice) if cfg!(target_os = "linux") => format!("{name}, {choice}").into(),
+        _ => name,
+    }
+}
+
 /// A setting and its current value, laid out side by side and read as one
 /// phrase: "Brightness, 100%".
 pub fn reading(
