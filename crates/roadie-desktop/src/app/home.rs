@@ -483,6 +483,13 @@ fn open_rename_dialog(
             cx.emit(StateEvent::InventoryChanged);
         });
     });
+    // The field, Cancel and Save, in Tab order. The dialog owns their focus
+    // because Tab in the library's dialog never left a text field.
+    let fields = std::rc::Rc::new([
+        gpui::Focusable::focus_handle(input.read(cx), cx),
+        cx.focus_handle().tab_stop(true),
+        cx.focus_handle().tab_stop(true),
+    ]);
     // The builder runs on every frame. Focusing the field in it pulled focus
     // back each frame, so Tab could never leave; the field is focused once.
     let focus_field = std::rc::Rc::new(std::cell::Cell::new(true));
@@ -490,9 +497,27 @@ fn open_rename_dialog(
         if focus_field.replace(false) {
             input.update(cx, |input, cx| input.focus(window, cx));
         }
-        // The dialog's own title is text no screen reader reaches, and with
-        // `button_props` alone it draws no buttons at all; its close button
-        // has no name. A heading and two named buttons replace all three.
+        let pal = theme::palette(cx);
+        let step = |fields: std::rc::Rc<[gpui::FocusHandle; 3]>, forward: bool| {
+            move |window: &mut Window, cx: &mut App| {
+                // Neither button focused means the field is: its focus sits
+                // on an element inside the input, not on the input's handle.
+                let at = if fields[1].is_focused(window) {
+                    1
+                } else if fields[2].is_focused(window) {
+                    2
+                } else {
+                    0
+                };
+                let next = if forward { (at + 1) % 3 } else { (at + 2) % 3 };
+                fields[next].focus(window, cx);
+            }
+        };
+        let next = step(fields.clone(), true);
+        let previous = step(fields.clone(), false);
+        // The dialog's own title is text no screen reader reaches, its close
+        // button has no name, and with `button_props` alone it draws no
+        // buttons. A heading and two named buttons replace all three.
         dialog
             .w(px(420.))
             .close_button(false)
@@ -502,31 +527,48 @@ fn open_rename_dialog(
                 2,
             ))
             .child(
-                v_flex().gap_2().child(control_input(&input)).child(
-                    div()
-                        .text_caption()
-                        .text_color(theme::palette(cx).text_muted)
-                        .child(gpui::text!(tr!("Leave blank to use the model name."))),
-                ),
-            )
-            .footer(
-                gpui_component::dialog::DialogFooter::new()
+                v_flex()
+                    .gap_3()
+                    // Tab and Shift+Tab are rebound in this context (see
+                    // `app::menu`) and walk the three controls here.
+                    .key_context("FieldDialog")
+                    .on_action(move |_: &crate::app::menu::NextField, window, cx| next(window, cx))
+                    .on_action(move |_: &crate::app::menu::PreviousField, window, cx| {
+                        previous(window, cx);
+                    })
+                    .child(control_input(&input))
                     .child(
-                        crate::ui::components::control_button("rename-device-cancel")
-                            .label(tr!("Cancel"))
-                            .on_click(|_, window, cx| window.close_dialog(cx)),
+                        div()
+                            .text_caption()
+                            .text_color(pal.text_muted)
+                            .child(gpui::text!(tr!("Leave blank to use the model name."))),
                     )
                     .child(
-                        crate::ui::components::control_button("rename-device-save")
-                            .primary()
-                            .label(tr!("Save"))
-                            .on_click({
-                                let save = save.clone();
-                                move |_, window, cx| {
-                                    save(cx);
-                                    window.close_dialog(cx);
-                                }
-                            }),
+                        h_flex()
+                            .justify_end()
+                            .gap_2()
+                            .child(dialog_button(
+                                "rename-device-cancel",
+                                tr!("Cancel"),
+                                &fields[1],
+                                false,
+                                pal,
+                                gpui_component::WindowExt::close_dialog,
+                            ))
+                            .child(dialog_button(
+                                "rename-device-save",
+                                tr!("Save"),
+                                &fields[2],
+                                true,
+                                pal,
+                                {
+                                    let save = save.clone();
+                                    move |window, cx| {
+                                        save(cx);
+                                        window.close_dialog(cx);
+                                    }
+                                },
+                            )),
                     ),
             )
             // Enter in the name field.
@@ -538,6 +580,38 @@ fn open_rename_dialog(
                 }
             })
     });
+}
+
+/// A dialog button whose focus the dialog owns, so Tab can be walked by hand.
+fn dialog_button(
+    id: &'static str,
+    label: SharedString,
+    focus: &gpui::FocusHandle,
+    primary: bool,
+    pal: Palette,
+    on_press: impl Fn(&mut Window, &mut App) + 'static,
+) -> BaseButton {
+    let accent = theme::accent();
+    BaseButton::new(id)
+        .track_focus(focus)
+        .accessibility_label(label.clone())
+        .px_4()
+        .h(px(theme::CONTROL_H))
+        .flex()
+        .items_center()
+        .rounded(pal.control_radius)
+        .border_2()
+        .border_color(if primary { accent } else { pal.border })
+        .when(primary, |button| {
+            button.bg(accent).text_color(gpui::white())
+        })
+        .when(!primary, |button| {
+            button.bg(pal.control).text_color(pal.text_primary)
+        })
+        .cursor_pointer()
+        .focus_visible(move |button| button.border_color(pal.text_primary))
+        .child(gpui::Text::new_inaccessible(label))
+        .on_click(move |_, window, cx| on_press(window, cx))
 }
 
 fn connection_view(record: &DeviceRecord, pal: Palette) -> impl IntoElement {

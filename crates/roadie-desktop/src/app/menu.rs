@@ -22,6 +22,10 @@ pub(crate) const APP_KEY_CONTEXT: &str = "OpenRoadie";
 actions!(
     roadie,
     [
+        /// Move focus to the next control from a text field in a dialog.
+        NextField,
+        /// Move focus to the previous control from a text field in a dialog.
+        PreviousField,
         /// Close the focused window.
         CloseWindow,
         /// Bring all OpenRoadie windows to the front.
@@ -113,6 +117,12 @@ pub fn install(cx: &mut App) {
         KeyBinding::new("cmd-w", CloseWindow, None),
         KeyBinding::new("cmd-,", OpenSettings, None),
         KeyBinding::new("alt-left", NavigateBack, Some(APP_KEY_CONTEXT)),
+        // A text field binds Tab to indent; in a dialog that kept focus in the
+        // field. These win for fields inside one, being bound later.
+        KeyBinding::new("tab", NextField, Some("FieldDialog > Input")),
+        KeyBinding::new("shift-tab", PreviousField, Some("FieldDialog > Input")),
+        KeyBinding::new("tab", NextField, Some("FieldDialog")),
+        KeyBinding::new("shift-tab", PreviousField, Some("FieldDialog")),
     ]);
 
     cx.set_menus(menus(cx));
