@@ -267,6 +267,8 @@ async fn observe_loop(
     let mut notified_unreachable = false;
     let mut notified_outdated = false;
     let mut inflight: Option<ObserveFuture> = None;
+    // A config reload asked for while no agent was connected (see `handle`).
+    let mut reload_owed = false;
     let mut retry = ticker(RECONNECT_DELAY);
     loop {
         // Taken for the duration of the select so the completed arm can consume
@@ -315,7 +317,7 @@ async fn observe_loop(
             Woken::Command(None) => break, // GUI dropped the sender → shut down
             Woken::Command(Some(cmd)) => {
                 inflight = pending;
-                if handle(&mut link, &mut conn_seq, update_tx, cmd)
+                if handle(&mut link, &mut conn_seq, &mut reload_owed, update_tx, cmd)
                     .await
                     .is_err()
                 {
@@ -326,7 +328,13 @@ async fn observe_loop(
             Woken::Reconnect => match ensure(&mut link, &mut conn_seq).await {
                 Ok(conn) => {
                     reflex.connected();
-                    inflight = Some(observe(conn));
+                    if reload_owed && reload(&conn.client, update_tx).await.is_err() {
+                        link = None;
+                        reflex.lost(Instant::now());
+                    } else {
+                        reload_owed = false;
+                        inflight = Some(observe(conn));
+                    }
                 }
                 Err(ConnectFailure::Unreachable) => reflex.agent_unreachable(),
                 Err(ConnectFailure::NewerAgent) => {
@@ -580,18 +588,30 @@ async fn ensure<'a>(
 
 /// Run one device command. `Err` signals a dropped connection so the caller
 /// reconnects; the command's own failure is reported back over its oneshot.
+///
+/// A reload asked for while no agent is connected sets `reload_owed` instead of
+/// failing: the file is already written, and the agent this client next
+/// reaches may be one that was running all along on the old settings (the GUI
+/// writes its first config before its first connect). The debt is paid on that
+/// connect, and its result is what the window reports. An agent that never
+/// comes is already reported by the unreachable frame.
 async fn handle(
     link: &mut Option<LiveConnection>,
     conn_seq: &mut u64,
+    reload_owed: &mut bool,
     update_tx: &mpsc::UnboundedSender<GuiUpdate>,
     cmd: Command,
 ) -> Result<(), ()> {
     // keep `link` None on connect failure; that's not a dropped live connection
     let Ok(conn) = ensure(link, conn_seq).await else {
-        reply_disconnected(update_tx, cmd);
+        undeliverable(update_tx, reload_owed, cmd);
         return Ok(());
     };
     let client = &conn.client;
+    // This reload covers an owed one; any other command pays the debt first.
+    if std::mem::take(reload_owed) && !matches!(cmd, Command::ReloadConfig) {
+        reload(client, update_tx).await?;
+    }
     let ctx = context::current();
     match cmd {
         Command::SetDpi(route, dpi) => log_apply(client.set_dpi(ctx, route, dpi).await)?,
@@ -625,26 +645,7 @@ async fn handle(
         Command::ReadSmartShift(route, reply) => {
             let _ = reply.send(rpc_result(client.read_smartshift(ctx, route).await)?);
         }
-        Command::ReloadConfig => {
-            // A transport failure is not the agent rejecting the config, but it
-            // is still a reload that did not happen — and the file on disk has
-            // already changed. Staying silent here would leave the window
-            // showing the new settings while the agent keeps running the old
-            // ones, which is exactly the divergence this fails closed on.
-            match client.reload_config(ctx).await {
-                Ok(result) => {
-                    let _ = update_tx.send(GuiUpdate::ConfigReloadResult(result));
-                }
-                Err(error) => {
-                    let _ = update_tx.send(GuiUpdate::ConfigReloadResult(Err(ConfigReloadError {
-                        message: format!(
-                            "saved, but the agent could not be reached to apply it: {error}"
-                        ),
-                    })));
-                    return Err(());
-                }
-            }
-        }
+        Command::ReloadConfig => reload(client, update_tx).await?,
         Command::RequestAccessibilityPrompt => client
             .request_accessibility_prompt(ctx)
             .await
@@ -665,6 +666,31 @@ async fn handle(
         Command::Desk(desk) => handle_desk(client, desk).await?,
     }
     Ok(())
+}
+
+/// Ask the agent to re-read the config file and report what it said.
+///
+/// A transport failure is not the agent rejecting the config, but it is still
+/// a reload that did not happen — and the file on disk has already changed.
+/// Staying silent would leave the window showing the new settings while the
+/// agent keeps running the old ones, which is exactly the divergence the
+/// window fails closed on.
+async fn reload(
+    client: &AgentClient,
+    update_tx: &mpsc::UnboundedSender<GuiUpdate>,
+) -> Result<(), ()> {
+    match client.reload_config(context::current()).await {
+        Ok(result) => {
+            let _ = update_tx.send(GuiUpdate::ConfigReloadResult(result));
+            Ok(())
+        }
+        Err(error) => {
+            let _ = update_tx.send(GuiUpdate::ConfigReloadResult(Err(ConfigReloadError {
+                message: format!("saved, but the agent could not be reached to apply it: {error}"),
+            })));
+            Err(())
+        }
+    }
 }
 
 /// One desk request, answered.
@@ -786,12 +812,22 @@ fn rpc_result<T>(r: Result<T, tarpc::client::RpcError>) -> Result<T, ()> {
     r.map_err(|_| ())
 }
 
+/// Settle a command no agent could take: a reload is owed to the next
+/// connection (see [`handle`]), everything else is answered as disconnected.
+fn undeliverable(
+    update_tx: &mpsc::UnboundedSender<GuiUpdate>,
+    reload_owed: &mut bool,
+    cmd: Command,
+) {
+    if matches!(cmd, Command::ReloadConfig) {
+        *reload_owed = true;
+    } else {
+        reply_disconnected(update_tx, cmd);
+    }
+}
+
 /// Reply to a read command that the agent is unreachable; writes are
 /// fire-and-forget so they have nothing to reply to.
-#[expect(
-    clippy::match_same_arms,
-    reason = "the two read arms send the same disconnect error to differently-typed reply channels, so they can't be merged"
-)]
 fn reply_disconnected(update_tx: &mpsc::UnboundedSender<GuiUpdate>, cmd: Command) {
     // Transient, not a permanent feature error: the agent is just restarting,
     // so the panel should keep retrying, not latch "unsupported".
@@ -823,17 +859,8 @@ fn reply_disconnected(update_tx: &mpsc::UnboundedSender<GuiUpdate>, cmd: Command
                 PairingFailure::AgentRestarted,
             ));
         }
-        Command::CancelPairing => {}
-        // Unlike the device commands above, a missed reload is not something a
-        // later poll repairs on its own: the config file has already changed,
-        // so the agent stays on the old one until another reload succeeds. Say
-        // so rather than let the window imply the change took effect.
-        Command::ReloadConfig => {
-            let _ = update_tx.send(GuiUpdate::ConfigReloadResult(Err(ConfigReloadError {
-                message: "saved, but the agent is not running, so it has not been applied yet"
-                    .to_string(),
-            })));
-        }
+        // A reload is never refused here: `handle` owes it to the next
+        // connection instead.
         _ => {}
     }
 }
@@ -886,17 +913,37 @@ mod tests {
     }
 
     #[test]
-    fn a_reload_that_never_reached_the_agent_is_reported() {
-        // The config file is already written by the time the reload is
-        // dispatched, so dropping this result silently would leave the window
-        // showing settings the agent is not running.
+    fn a_reload_with_no_agent_is_owed_rather_than_refused() {
+        // The GUI writes its first config before its first connect. Refusing
+        // that reload locked the whole window behind a configuration error on
+        // every fresh install, though the agent was about to be reached.
         let (update_tx, mut update_rx) = mpsc::unbounded_channel();
+        let mut reload_owed = false;
 
-        reply_disconnected(&update_tx, Command::ReloadConfig);
+        undeliverable(&update_tx, &mut reload_owed, Command::ReloadConfig);
 
-        let Ok(GuiUpdate::ConfigReloadResult(Err(error))) = update_rx.try_recv() else {
-            panic!("a reload that never reached the agent must be reported as failed");
-        };
-        assert!(!error.message.is_empty(), "the notice needs a reason");
+        assert!(reload_owed, "the reload must wait for the next connection");
+        assert!(
+            update_rx.try_recv().is_err(),
+            "nothing may be reported as refused"
+        );
+    }
+
+    #[test]
+    fn other_commands_with_no_agent_are_still_answered() {
+        let (update_tx, mut update_rx) = mpsc::unbounded_channel();
+        let mut reload_owed = false;
+
+        undeliverable(
+            &update_tx,
+            &mut reload_owed,
+            Command::StartPairing(ReceiverSelector::First),
+        );
+
+        assert!(!reload_owed, "only a reload is owed");
+        assert!(
+            matches!(update_rx.try_recv(), Ok(GuiUpdate::PairingUndeliverable(_))),
+            "a pairing request must still hear that it went nowhere"
+        );
     }
 }
