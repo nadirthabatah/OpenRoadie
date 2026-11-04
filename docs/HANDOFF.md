@@ -1226,9 +1226,20 @@ log as `SPEECH OUTPUT`. That found what tree audits could not:
 - **Rebuilding a page left focus on nothing** with the new library, so
   Settings owns a focus handle per page tab and gives the chosen tab focus
   back on the next frame.
-- **Still open:** inside the library dialog, Tab does not leave a text
-  field (Enter saves, Escape cancels). An upstream issue is drafted and not
-  posted.
+- **A dialog builder runs on every frame.** The rename dialog focused its
+  name field in the builder, so focus moved by Tab came straight back; the
+  field is now focused once, when it opens.
+- **High contrast was checked on screen** with screenshots: forced on
+  Linux and Windows, and turned on from a `HighContrast` GTK theme on
+  Linux. Black or white pages, as designed.
+- **A Linux kernel without the hidraw class** (WSL, containers) made every
+  device list fail with "No such file or directory"; `roadie-hid` now
+  lists no devices there. The CLI's own tests caught it, run in WSL.
+- **Tab in the rename dialog** walks the field, Cancel and Save through
+  focus handles the dialog owns, since a text field binds Tab to indent.
+- **High contrast draws card edges** and swaps the status colours for ones
+  that keep 3:1 on its black or white page (`theme::status_connected` and
+  siblings).
 
 The T3 Code app on this PC brings no Linux of its own: its `wsl-runtime` is
 its server, installed into WSL. WSL with WSLg is the Linux to test in.
