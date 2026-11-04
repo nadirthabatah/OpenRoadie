@@ -255,7 +255,9 @@ impl Render for DpiPanel {
                             .child(gpui::text!(tr!("Presets"))),
                     )
                     .child(
-                        h_flex()
+                        // Named, so "Add" is heard as adding a DPI preset.
+                        crate::ui::a11y::group("dpi-presets", tr!("Presets"))
+                            .flex()
                             .gap_2()
                             .flex_wrap()
                             .children(preset_chips)
@@ -398,6 +400,11 @@ fn preset_chip(idx: usize, value: Dpi, active: bool, presets: &[Dpi]) -> impl In
                 .xsmall()
                 .ghost()
                 .icon(IconName::Close)
+                // Icon-only, so the name rides inside where a screen reader finds it.
+                .child(crate::ui::a11y::spoken_name(
+                    "name",
+                    tr!("Remove %{name}", name => value.to_string()),
+                ))
                 .on_click(move |_event, _window, cx| {
                     let mut next = presets_for_remove.clone();
                     if idx < next.len() {
