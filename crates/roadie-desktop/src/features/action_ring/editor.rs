@@ -2,7 +2,7 @@
 
 use gpui::{
     Entity, InteractiveElement, IntoElement, ParentElement, Role, ScrollHandle,
-    StatefulInteractiveElement as _, Styled, div, prelude::FluentBuilder as _, px, rgb, svg,
+    StatefulInteractiveElement as _, Styled, div, prelude::FluentBuilder as _, px, svg,
 };
 use gpui_component::{
     Icon, IconName, Selectable as _, button::Button, h_flex, input::InputState,
@@ -271,7 +271,7 @@ fn action_sections(
                     row.child(
                         Icon::new(IconName::Check)
                             .size_3()
-                            .text_color(rgb(theme::ACCENT_BLUE)),
+                            .text_color(theme::accent()),
                     )
                 })
                 .on_click(move |_, _, cx| {

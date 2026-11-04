@@ -31,7 +31,7 @@ files; **keep this table in sync when you add or move one**:
 | `roadie-camera/src/uvc.rs`, `.../uvc/iokit.rs` | IOKit USB / UVC control transfers; every `unsafe` in the macOS UVC backend lives in `iokit.rs` |
 | `roadie-display/src/macos.rs` | `IOAVService` — the private IOKit SPI carrying I²C to an external monitor, resolved by `dlopen`/`dlsym`, plus the `DCPAVServiceProxy` registry walk that finds the displays |
 | `roadie-desktop/src/platform/registration/macos.rs` | `SMAppService` registration of the agent's launchd service (the login-item side of the agent lifecycle; the GUI must own it — the API resolves the plist against the calling app's bundle) |
-| `roadie-desktop/src/platform/os.rs` | `NSProcessInfo` OS version + the `NSAppearance` titlebar sync |
+| `roadie-desktop/src/platform/os.rs` | `NSProcessInfo` OS version, the `NSAppearance` titlebar sync, and the `NSWorkspace` Increase Contrast read |
 | `roadie-hid/src/permissions.rs` | `IOHIDCheckAccess` / `IOHIDRequestAccess` (the prompting half of Input Monitoring) |
 | `roadie-hook/src/macos.rs` | the CGEventTap (on `core-graphics`, see below), the `NSWorkspace` frontmost-app read, the Accessibility-trust check/prompt, and the HID sender-id lookup |
 | `roadie-inject/src/inject/macos.rs` | CGEvent synthesis, media-key `NSEvent`s, raw `AXUIElement` navigation, and the `dlopen`'d private SPIs |

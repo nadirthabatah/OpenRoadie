@@ -1,5 +1,6 @@
-//! Best-effort host OS version string for the diagnostics report, plus syncing
-//! the native window chrome (titlebar) to the in-app appearance preference.
+//! Best-effort host OS version string for the diagnostics report, syncing the
+//! native window chrome (titlebar) to the in-app appearance preference, and the
+//! operating system's high-contrast and text-size settings.
 
 use roadie_core::config::Appearance;
 
@@ -121,8 +122,14 @@ pub fn high_contrast() -> bool {
         || setting("org.gnome.desktop.interface", "gtk-theme").is_some_and(|theme| named(&theme))
 }
 
-/// See the Windows twin. macOS's Increase Contrast is not read yet.
-#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+/// See the Windows twin: here, Accessibility, Display, Increase contrast.
+#[cfg(target_os = "macos")]
+pub fn high_contrast() -> bool {
+    objc2_app_kit::NSWorkspace::sharedWorkspace().accessibilityDisplayShouldIncreaseContrast()
+}
+
+/// See the Windows twin.
+#[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
 pub fn high_contrast() -> bool {
     false
 }

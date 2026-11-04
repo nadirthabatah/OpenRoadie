@@ -4,7 +4,7 @@ use crate::state::{AppState, DeviceRecord, LightCommandStatus, StateEvent};
 use crate::ui::components::Toggle;
 
 use super::visual::LightView;
-use crate::ui::theme::{self, ACCENT_BLUE, Palette, Typography as _};
+use crate::ui::theme::{self, Palette, Typography as _};
 use gpui::{
     App, AppContext as _, BoxShadow, Context, Entity, Hsla, IntoElement, ParentElement, Render,
     Styled, Subscription, Window, div, hsla, point, prelude::FluentBuilder as _, px, rgb,
@@ -456,7 +456,7 @@ fn control_well(
                 .child(
                     div()
                         .text_body()
-                        .text_color(rgb(ACCENT_BLUE))
+                        .text_color(theme::accent())
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .child(value),
                 ),

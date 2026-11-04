@@ -15,7 +15,7 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, AppContext as _, Context, Entity, IntoElement, ParentElement, Render,
-    SharedString, Styled, Subscription, Window, div, px, rgb,
+    SharedString, Styled, Subscription, Window, div, px,
 };
 use gpui_component::{
     Disableable as _, Selectable as _,
@@ -35,7 +35,7 @@ use crate::state::{AppState, DeviceKey, SmartShiftLoad, SmartShiftWriteStatus, S
 use crate::ui::components::Toggle;
 use crate::ui::section::section_label;
 use crate::ui::status::{retry_line, status_line};
-use crate::ui::theme::{self, ACCENT_BLUE, Palette, Typography as _};
+use crate::ui::theme::{self, Palette, Typography as _};
 
 /// Friendly slider range for the `autoDisengage` threshold. The wire field is
 /// `0x01`–`0xFE` (0.25 turn/s steps); the slider exposes the usable band
@@ -233,7 +233,7 @@ impl SmartShiftPanel {
             );
 
         let value_color = if sensitivity_enabled {
-            rgb(ACCENT_BLUE).into()
+            theme::accent()
         } else {
             pal.text_muted
         };
@@ -314,7 +314,7 @@ impl SmartShiftPanel {
                     .child(
                         div()
                             .text_body()
-                            .text_color(rgb(ACCENT_BLUE))
+                            .text_color(theme::accent())
                             .child(format!("{display}")),
                     ),
             )

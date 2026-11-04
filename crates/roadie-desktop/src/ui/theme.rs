@@ -14,7 +14,7 @@
 
 #[cfg(test)]
 use gpui::rgb;
-use gpui::{App, FontWeight, Hsla, Pixels, Rems, Rgba, Styled, Window, hsla, px, relative, rems};
+use gpui::{App, FontWeight, Hsla, Pixels, Rems, Rgba, Styled, Window, px, relative, rems};
 use gpui_component::{ActiveTheme as _, Theme, ThemeMode, ThemeRegistry};
 use roadie_core::config::{Appearance, Contrast, UiScale};
 
@@ -26,7 +26,19 @@ use super::spacing::DynamicSpacing;
 // this app does — it cannot depend on this crate, and a local copy is how the
 // ring ended up with a blue of its own. Re-exported so screens keep reading it
 // off `theme::`, beside the status hues and the appearance-derived [`Palette`].
-pub use roadie_ui::color::{ACCENT_BLUE, accent};
+pub use roadie_ui::color::ACCENT_BLUE;
+
+/// The accent the app paints with now: the brand blue, or while contrast is
+/// high the high-contrast pair's own highlight, because the brand blue on
+/// white falls short of the 3:1 a focus or selection outline needs. Set only
+/// by [`apply_from_settings`], which owns the theme, and read every paint.
+static ACCENT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(ACCENT_BLUE);
+
+/// The current accent; see [`ACCENT`].
+#[must_use]
+pub fn accent() -> Hsla {
+    gpui::rgb(ACCENT.load(std::sync::atomic::Ordering::Relaxed)).into()
+}
 
 /// Status colours for the connectivity readouts. Fixed like the accent, but the
 /// overlay draws no status, so they stay with the app that does.
@@ -255,6 +267,9 @@ pub const ROADIE_DARK: &str = "OpenRoadie Dark";
 /// The high-contrast slots, chosen over the user's themes while contrast is high.
 pub const HIGH_CONTRAST_LIGHT: &str = "OpenRoadie High Contrast Light";
 pub const HIGH_CONTRAST_DARK: &str = "OpenRoadie High Contrast Dark";
+/// The highlights `themes/high-contrast.json` selects with, as [`ACCENT`] takes them.
+const HIGH_CONTRAST_LIGHT_ACCENT: u32 = 0x0000_009f;
+const HIGH_CONTRAST_DARK_ACCENT: u32 = 0x00ff_ff00;
 
 /// Register every bundled theme into the [`ThemeRegistry`]. Call once at
 /// startup, after `gpui_component::init` (which seeds the registry global). Our
@@ -339,15 +354,15 @@ pub fn apply_from_settings(window: Option<&mut Window>, cx: &mut App) {
 
     // High contrast replaces the chosen pair outright: no other theme is
     // guaranteed to keep every text and border legible.
-    let (light_name, dark_name) =
-        if contrast == Contrast::High || crate::platform::os::high_contrast() {
-            (
-                Some(HIGH_CONTRAST_LIGHT.to_owned()),
-                Some(HIGH_CONTRAST_DARK.to_owned()),
-            )
-        } else {
-            (light_name, dark_name)
-        };
+    let high_contrast = contrast == Contrast::High || crate::platform::os::high_contrast();
+    let (light_name, dark_name) = if high_contrast {
+        (
+            Some(HIGH_CONTRAST_LIGHT.to_owned()),
+            Some(HIGH_CONTRAST_DARK.to_owned()),
+        )
+    } else {
+        (light_name, dark_name)
+    };
 
     // Pull the chosen configs out of the registry before borrowing the Theme
     // mutably (both live as globals).
@@ -378,6 +393,14 @@ pub fn apply_from_settings(window: Option<&mut Window>, cx: &mut App) {
         Appearance::Dark => ThemeMode::Dark,
     };
     Theme::change(mode, window, cx);
+    ACCENT.store(
+        match (high_contrast, mode.is_dark()) {
+            (false, _) => ACCENT_BLUE,
+            (true, true) => HIGH_CONTRAST_DARK_ACCENT,
+            (true, false) => HIGH_CONTRAST_LIGHT_ACCENT,
+        },
+        std::sync::atomic::Ordering::Relaxed,
+    );
 
     let theme = Theme::global_mut(cx);
     normalize_theme_text_contrast(theme);
@@ -395,13 +418,13 @@ pub fn apply_from_settings(window: Option<&mut Window>, cx: &mut App) {
 /// that it stays derived from the brand colour.
 #[must_use]
 pub fn accent_tint() -> Hsla {
-    hsla(0.6, 0.9, 0.6, 0.12)
+    accent().opacity(0.12)
 }
 
 /// [`accent_tint`] deepened for hover on an already-selected row.
 #[must_use]
 pub fn accent_tint_hover() -> Hsla {
-    hsla(0.6, 0.9, 0.6, 0.18)
+    accent().opacity(0.18)
 }
 
 /// Chaining helpers expressing the single "selected" decision — accent border

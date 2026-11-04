@@ -6,7 +6,7 @@ mod editor;
 use gpui::{
     App, AppContext as _, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
     ParentElement, Render, ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled,
-    Subscription, Window, div, prelude::FluentBuilder as _, px, rgb, svg,
+    Subscription, Window, div, prelude::FluentBuilder as _, px, svg,
 };
 use gpui_base::Button as BaseButton;
 use gpui_component::{
@@ -337,7 +337,7 @@ fn slot_button(
         .rounded_full()
         .border_2()
         .border_color(if selected {
-            rgb(theme::ACCENT_BLUE).into()
+            theme::accent()
         } else {
             pal.border
         })
@@ -376,7 +376,7 @@ fn slot_button(
         })
         .focus_visible(move |button| {
             button
-                .border_color(rgb(theme::ACCENT_BLUE))
+                .border_color(theme::accent())
                 .bg(if selected {
                     theme::accent_tint_hover()
                 } else {

@@ -28,7 +28,7 @@ use gpui::{
     AnyElement, App, AppContext as _, Bounds, Context, Entity, FontWeight, Hsla,
     InteractiveElement, IntoElement, ParentElement, PathBuilder, Render, RenderOnce, Role,
     StatefulInteractiveElement as _, Styled, Subscription, Window, canvas, div, hsla, point,
-    prelude::FluentBuilder as _, px, rgb, svg,
+    prelude::FluentBuilder as _, px, svg,
 };
 use gpui_component::{Selectable as _, h_flex, input::InputState, v_flex};
 use roadie_core::binding::{Action, WorkflowStep};
@@ -47,7 +47,7 @@ use crate::services::assets::{GlowGeometry, ResolvedAsset};
 use crate::state::{AppState, DeviceRecord, StateEvent};
 use crate::ui::action::localized_action_label;
 use crate::ui::components::MenuRow;
-use crate::ui::theme::{self, ACCENT_BLUE, Palette, Typography as _};
+use crate::ui::theme::{self, Palette, Typography as _};
 use gpui::ease_in_out;
 use gpui::{Animation, AnimationExt, img};
 
@@ -547,7 +547,7 @@ impl RenderOnce for KeyCallout {
             .rounded_md()
             .border_1()
             .border_color(if highlighted {
-                rgb(ACCENT_BLUE).into()
+                theme::accent()
             } else {
                 pal.border
             })
@@ -569,7 +569,7 @@ impl RenderOnce for KeyCallout {
                     .text_caption()
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_color(if highlighted {
-                        rgb(ACCENT_BLUE).into()
+                        theme::accent()
                     } else {
                         pal.text_primary
                     })
@@ -584,7 +584,7 @@ impl RenderOnce for KeyCallout {
                     .when_some(binding_icon, |row, icon| {
                         row.child(svg().path(icon).size(px(9.)).flex_none().text_color(
                             if highlighted {
-                                rgb(ACCENT_BLUE).into()
+                                theme::accent()
                             } else {
                                 pal.text_muted
                             },
@@ -598,7 +598,7 @@ impl RenderOnce for KeyCallout {
                             .whitespace_nowrap()
                             .text_caption()
                             .text_color(if highlighted {
-                                rgb(ACCENT_BLUE).into()
+                                theme::accent()
                             } else {
                                 pal.text_muted
                             })
@@ -656,8 +656,8 @@ fn key_click_target(
                             .h(px(KEY_HOTSPOT_DOT))
                             .rounded_full()
                             .border_1()
-                            .border_color(gpui::Hsla::from(rgb(ACCENT_BLUE)))
-                            .bg(gpui::Hsla::from(rgb(ACCENT_BLUE))),
+                            .border_color(theme::accent())
+                            .bg(theme::accent()),
                     )
                     .rounded_full()
                     .border_1()
@@ -727,7 +727,7 @@ fn paint_keyboard_leaders(
         path.line_to(end);
         if let Ok(path) = path.build() {
             if highlighted {
-                window.paint_path(path, rgb(ACCENT_BLUE));
+                window.paint_path(path, theme::accent());
             } else {
                 window.paint_path(path, hsla(0., 0., 0.55, 0.35));
             }
@@ -927,7 +927,7 @@ fn panel_action_rows(
                             s.child(
                                 gpui_component::Icon::new(gpui_component::IconName::Check)
                                     .size_3()
-                                    .text_color(rgb(ACCENT_BLUE)),
+                                    .text_color(theme::accent()),
                             )
                         })
                         .on_click(move |_ev, _window, cx| {

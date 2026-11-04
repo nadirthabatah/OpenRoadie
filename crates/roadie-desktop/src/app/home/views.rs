@@ -3,7 +3,7 @@
 use gpui::{
     AnyElement, Context, ElementId, InteractiveElement, IntoElement, ParentElement, Rems,
     SharedString, StatefulInteractiveElement as _, Styled, div, prelude::FluentBuilder as _, px,
-    rems, rgb,
+    rems,
 };
 use gpui_base::Button as BaseButton;
 use gpui_component::{
@@ -231,8 +231,8 @@ fn device_card_element(
         // item, not something to press, so the card lost its Invoke action and
         // voice control and screen-reader activation could not open it.
         .cursor_pointer()
-        .hover(move |card| card.border_color(rgb(theme::ACCENT_BLUE)).shadow_sm())
-        .focus_visible(move |card| card.border_color(rgb(theme::ACCENT_BLUE)).shadow_sm())
+        .hover(move |card| card.border_color(theme::accent()).shadow_sm())
+        .focus_visible(move |card| card.border_color(theme::accent()).shadow_sm())
         .on_click(move |_, _, cx| {
             view.update(cx, |this, cx| {
                 this.open_device(record_key.clone(), cx);
@@ -332,8 +332,8 @@ fn device_list_row(
         // item, not something to press, so the card lost its Invoke action and
         // voice control and screen-reader activation could not open it.
         .cursor_pointer()
-        .hover(move |row| row.border_color(rgb(theme::ACCENT_BLUE)).shadow_sm())
-        .focus_visible(move |row| row.border_color(rgb(theme::ACCENT_BLUE)).shadow_sm())
+        .hover(move |row| row.border_color(theme::accent()).shadow_sm())
+        .focus_visible(move |row| row.border_color(theme::accent()).shadow_sm())
         .on_click(move |_, _, cx| {
             view.update(cx, |this, cx| {
                 this.open_device(record_key.clone(), cx);

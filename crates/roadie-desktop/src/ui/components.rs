@@ -7,7 +7,7 @@
 use gpui::{
     AnyElement, App, ClickEvent, ElementId, Entity, InteractiveElement, Interactivity, IntoElement,
     ParentElement, Pixels, RenderOnce, Role, SharedString, Stateful, StatefulInteractiveElement,
-    Styled, Window, div, prelude::FluentBuilder as _, px, rgb,
+    Styled, Window, div, prelude::FluentBuilder as _, px,
 };
 use gpui_base::Button as BaseButton;
 use gpui_component::{
@@ -18,7 +18,7 @@ use gpui_component::{
     v_flex,
 };
 
-use super::theme::{self, ACCENT_BLUE, SelectableStyle as _, Typography as _};
+use super::theme::{self, SelectableStyle as _, Typography as _};
 
 /// A gpui-component button at the house control height.
 ///
@@ -179,7 +179,7 @@ impl RenderOnce for Toggle {
             _ => (px(36.), px(20.), px(16.)),
         };
         let inset = px(2.);
-        let accent: gpui::Hsla = rgb(ACCENT_BLUE).into();
+        let accent: gpui::Hsla = theme::accent();
         let unchecked: gpui::Hsla = *gpui_component::ActiveTheme::theme(cx).tokens.switch;
         let thumb_colour: gpui::Hsla = *gpui_component::ActiveTheme::theme(cx).tokens.switch_thumb;
         let pal = theme::palette(cx);
@@ -498,7 +498,7 @@ impl StatefulInteractiveElement for ProfileTab {}
 impl RenderOnce for ProfileTab {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let pal = theme::palette(cx);
-        let accent = rgb(ACCENT_BLUE);
+        let accent = theme::accent();
         let has_delete = self.delete.is_some();
         let label = self.label;
         self.base
@@ -513,11 +513,7 @@ impl RenderOnce for ProfileTab {
             .items_center()
             .rounded_full()
             .border_1()
-            .border_color(if self.selected {
-                accent.into()
-            } else {
-                pal.border
-            })
+            .border_color(if self.selected { accent } else { pal.border })
             .text_caption()
             .text_color(if self.selected {
                 pal.text_primary

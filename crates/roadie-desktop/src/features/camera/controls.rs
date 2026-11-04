@@ -15,7 +15,7 @@ use gpui::{
     App, AppContext as _, ClickEvent, Context, ElementId, Entity, InteractiveElement, IntoElement,
     MouseButton, MouseDownEvent, ParentElement, Render, Role, SharedString,
     StatefulInteractiveElement as _, Styled, Subscription, Toggled, Window, div,
-    prelude::FluentBuilder as _, px, rgb,
+    prelude::FluentBuilder as _, px,
 };
 use gpui_base::Button as BaseButton;
 use gpui_component::{
@@ -30,7 +30,7 @@ use tracing::debug;
 use crate::state::{AppState, StateEvent};
 use crate::ui::components::ProfileTab;
 use crate::ui::section::section_label;
-use crate::ui::theme::{self, ACCENT_BLUE, Palette, Typography as _};
+use crate::ui::theme::{self, Palette, Typography as _};
 
 /// Built-in profiles: `values` are fractions of each control's own range, so
 /// they scale to whatever the camera reports. Auto modes all engage — the
@@ -876,7 +876,7 @@ fn control_row(
                 .text_color(if dimmed {
                     pal.text_muted
                 } else {
-                    rgb(ACCENT_BLUE).into()
+                    theme::accent()
                 })
                 .child(format!("{value}")),
         );
@@ -888,7 +888,7 @@ fn control_row(
         && let Some(toggle) = slider.control.auto_toggle()
         && let Some(auto_ix) = panel.autos.iter().position(|a| a.toggle == toggle)
     {
-        let accent = rgb(ACCENT_BLUE);
+        let accent = theme::accent();
         auto_cell = auto_cell.child(
             BaseButton::new((ElementId::from("camera-control-auto"), toggle.name()))
                 .role(Role::CheckBox)
@@ -899,7 +899,7 @@ fn control_row(
                 .py_0p5()
                 .rounded_full()
                 .border_1()
-                .border_color(if on { accent.into() } else { pal.border })
+                .border_color(if on { accent } else { pal.border })
                 .text_caption()
                 .text_color(if on { pal.text_primary } else { pal.text_muted })
                 .bg(if on {
@@ -938,7 +938,7 @@ fn frequency_row(
     .filter(|(value, _, _)| slider.range.supports(*value))
     {
         let active = value == current;
-        let accent = rgb(ACCENT_BLUE);
+        let accent = theme::accent();
         let accessibility_label = label.clone();
         choices = choices.child(
             BaseButton::new(("camera-frequency", id))
@@ -955,7 +955,7 @@ fn frequency_row(
                 .py_0p5()
                 .rounded_full()
                 .border_1()
-                .border_color(if active { accent.into() } else { pal.border })
+                .border_color(if active { accent } else { pal.border })
                 .text_caption()
                 .text_color(if active {
                     pal.text_primary
@@ -1007,7 +1007,7 @@ fn binary_control_row(
 ) -> gpui::Stateful<gpui::Div> {
     let slider = &panel.sliders[ix];
     let on = from_slider(slider.state.read(cx).value().start()) != 0;
-    let accent = rgb(ACCENT_BLUE);
+    let accent = theme::accent();
     h_flex()
         .id(("camera-control-row", ix))
         .w_full()
@@ -1033,7 +1033,7 @@ fn binary_control_row(
                 .py_0p5()
                 .rounded_full()
                 .border_1()
-                .border_color(if on { accent.into() } else { pal.border })
+                .border_color(if on { accent } else { pal.border })
                 .text_caption()
                 .text_color(if on { pal.text_primary } else { pal.text_muted })
                 .bg(if on {
