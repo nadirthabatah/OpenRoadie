@@ -31,10 +31,16 @@ struct Cli {
 /// Returns the exit status the process should terminate with — `list` uses a
 /// distinct one to report that no hardware is connected.
 pub async fn run() -> Result<ExitCode> {
+    // The inventory's retry warnings are news in the long-running agent and
+    // noise here: a one-shot command that could not open a device says so in
+    // a sentence, after the inventory has already warned once per node per
+    // tick — a dozen identical lines read aloud before the one that matters.
+    // `ROADIE_LOG` still brings them back.
+    const DEFAULT_LOG: &str = "info,roadie_device::inventory=error";
     fmt()
         .with_writer(std::io::stderr)
         .with_env_filter(
-            EnvFilter::try_from_env("ROADIE_LOG").unwrap_or_else(|_| EnvFilter::new("info")),
+            EnvFilter::try_from_env("ROADIE_LOG").unwrap_or_else(|_| EnvFilter::new(DEFAULT_LOG)),
         )
         .init();
 
