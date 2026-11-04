@@ -114,43 +114,48 @@ impl DeskPanel {
             .child(self.card_heading(&deck.id, &deck.name, pal))
             .child(Self::caption("describe", describe, pal))
             .child(
-                a11y::group("brightness", tr!("Screen brightness"))
-                    .flex()
-                    .flex_col()
-                    .gap_2()
-                    .child(
-                        div()
-                            .text_caption()
-                            .child(gpui::Text::new_inaccessible(tr!("Screen brightness"))),
-                    )
-                    .child(
-                        h_flex()
-                            .gap_2()
-                            .child(Self::brightness_button(
-                                deck,
-                                deck_index,
-                                "full",
-                                tr!("Full brightness"),
-                                FULL,
-                                cx,
-                            ))
-                            .child(Self::brightness_button(
-                                deck,
-                                deck_index,
-                                "dim",
-                                tr!("Dim"),
-                                DIM,
-                                cx,
-                            ))
-                            .child(Self::brightness_button(
-                                deck,
-                                deck_index,
-                                "off",
-                                tr!("Off"),
-                                OFF,
-                                cx,
-                            )),
-                    ),
+                // Says the deck too: Narrator names only the innermost group it enters,
+                // so two decks' "Screen brightness" could not be told apart.
+                a11y::group(
+                    "brightness",
+                    format!("{}, {}", deck.name, tr!("Screen brightness")),
+                )
+                .flex()
+                .flex_col()
+                .gap_2()
+                .child(
+                    div()
+                        .text_caption()
+                        .child(gpui::Text::new_inaccessible(tr!("Screen brightness"))),
+                )
+                .child(
+                    h_flex()
+                        .gap_2()
+                        .child(Self::brightness_button(
+                            deck,
+                            deck_index,
+                            "full",
+                            tr!("Full brightness"),
+                            FULL,
+                            cx,
+                        ))
+                        .child(Self::brightness_button(
+                            deck,
+                            deck_index,
+                            "dim",
+                            tr!("Dim"),
+                            DIM,
+                            cx,
+                        ))
+                        .child(Self::brightness_button(
+                            deck,
+                            deck_index,
+                            "off",
+                            tr!("Off"),
+                            OFF,
+                            cx,
+                        )),
+                ),
             )
             .child(
                 control_button(ElementId::NamedInteger(
