@@ -106,10 +106,16 @@ pub enum Platform {
     Other,
 }
 
-/// Raw HID nodes on a Linux machine.
+/// Raw HID nodes on a Linux machine — only the ones this program drives.
+///
+/// Counting every node made `doctor` advise opening an ASUS lighting
+/// controller nothing here can configure, which is exactly the hand-out the
+/// shipped rules refuse to make. A node counts when its vendor is one the
+/// shipped rules name, or when its report descriptor declares the VIA usage
+/// page — the test `roadie via` itself applies.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hidraw {
-    /// How many `/dev/hidraw*` nodes exist.
+    /// How many `/dev/hidraw*` nodes this program drives exist.
     pub present: usize,
     /// How many of them this process could open for reading.
     pub openable: usize,
@@ -122,13 +128,35 @@ pub struct Hidraw {
     /// confusing shape a permissions problem can take. Checking only reads
     /// would report all-clear on exactly that machine.
     pub writable: usize,
-    /// USB vendor ids of the nodes that could not be opened.
+    /// USB vendor ids of blocked VIA boards whose vendor the shipped rules do
+    /// not name — the only devices a local rule line is the answer for.
     ///
     /// Carried so the advice can be a rule someone pastes rather than a
     /// research task. "Write a udev rule" is not a step; a line with the right
     /// four hex digits already in it is.
     pub blocked_vendors: Vec<u16>,
+    /// Blocked nodes whose vendor the shipped rules already name. A rule line
+    /// for these is advice already followed; the cause is elsewhere.
+    pub blocked_covered: usize,
+    /// Whether `70-roadie.rules` is installed where udev reads it.
+    pub rules_installed: bool,
+    /// Whether this is a remote session, such as SSH. `uaccess` grants a
+    /// device to whoever is signed in at the machine itself, so on a remote
+    /// session installed rules apply to nobody, and that has to be said
+    /// rather than mistaken for missing rules.
+    pub remote: bool,
 }
+
+/// Vendors `packaging/linux/udev/70-roadie.rules` grants hidraw access to.
+/// A test reads that file, so the two cannot drift apart silently.
+const SHIPPED_HIDRAW_VENDORS: [u16; 2] = [0x046d, 0x0fd9];
+
+/// Where an installed copy of the shipped rules may live.
+const RULES_LOCATIONS: [&str; 3] = [
+    "/etc/udev/rules.d/70-roadie.rules",
+    "/usr/lib/udev/rules.d/70-roadie.rules",
+    "/lib/udev/rules.d/70-roadie.rules",
+];
 
 /// How a check came out.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -274,11 +302,16 @@ fn count_hidraw() -> Option<Hidraw> {
                 .and_then(|name| name.to_str())
                 .is_some_and(|name| name.starts_with("hidraw"))
         })
+        .filter(|path| {
+            vendor_of(path).is_some_and(|vendor| SHIPPED_HIDRAW_VENDORS.contains(&vendor))
+                || is_via_node(path)
+        })
         .collect();
 
     let mut openable = 0;
     let mut writable = 0;
     let mut blocked_vendors: Vec<u16> = Vec::new();
+    let mut blocked_covered = 0;
     for node in &nodes {
         // Opening for write sends nothing to the device; it only asks the
         // kernel whether this process would be allowed to.
@@ -296,10 +329,10 @@ fn count_hidraw() -> Option<Hidraw> {
             openable += 1;
             continue;
         }
-        if let Some(vendor) = vendor_of(node)
-            && !blocked_vendors.contains(&vendor)
-        {
-            blocked_vendors.push(vendor);
+        match vendor_of(node) {
+            Some(vendor) if SHIPPED_HIDRAW_VENDORS.contains(&vendor) => blocked_covered += 1,
+            Some(vendor) if !blocked_vendors.contains(&vendor) => blocked_vendors.push(vendor),
+            _ => {}
         }
     }
     blocked_vendors.sort_unstable();
@@ -308,7 +341,58 @@ fn count_hidraw() -> Option<Hidraw> {
         openable,
         writable,
         blocked_vendors,
+        blocked_covered,
+        rules_installed: RULES_LOCATIONS
+            .iter()
+            .any(|path| std::path::Path::new(path).exists()),
+        remote: std::env::var_os("SSH_CONNECTION").is_some()
+            || std::env::var_os("SSH_TTY").is_some(),
     })
+}
+
+/// Whether a hidraw node is a VIA board, read from the report descriptor
+/// the kernel publishes for it.
+fn is_via_node(node: &std::path::Path) -> bool {
+    node.file_name()
+        .and_then(|name| name.to_str())
+        .and_then(|name| {
+            std::fs::read(format!("/sys/class/hidraw/{name}/device/report_descriptor")).ok()
+        })
+        .is_some_and(|descriptor| declares_via_page(&descriptor))
+}
+
+/// Whether a HID report descriptor declares the VIA usage page.
+///
+/// Walks the items rather than searching for bytes, so a page value inside
+/// some other item's data cannot be mistaken for one. A short item's prefix
+/// carries its size in the low two bits (3 meaning 4 bytes); `0xFE` opens a
+/// long item whose size is the next byte. Usage Page is the global item with
+/// tag bits `0x04`.
+fn declares_via_page(descriptor: &[u8]) -> bool {
+    let mut at = 0;
+    while let Some(&prefix) = descriptor.get(at) {
+        if prefix == 0xfe {
+            let size = descriptor.get(at + 1).map_or(0, |size| usize::from(*size));
+            at += 3 + size;
+            continue;
+        }
+        let size = match prefix & 0x03 {
+            3 => 4,
+            other => usize::from(other),
+        };
+        let Some(data) = descriptor.get(at + 1..at + 1 + size) else {
+            return false;
+        };
+        if prefix & 0xfc == 0x04 {
+            let mut page = [0u8; 4];
+            page[..size].copy_from_slice(data);
+            if u32::from_le_bytes(page) == u32::from(roadie_via::identity::USAGE_PAGE) {
+                return true;
+            }
+        }
+        at += 1 + size;
+    }
+    false
 }
 
 /// The USB vendor id behind a `/dev/hidrawN` node.
@@ -438,7 +522,7 @@ fn linux_access(hidraw: &Hidraw) -> Verdict {
                  there.",
                 counted(hidraw.present, "HID device is", "HID devices are")
             ),
-            fix: udev_fix(&hidraw.blocked_vendors),
+            fix: udev_fix(hidraw),
         };
     }
     // Checked before the read counts below, because a machine where reads work
@@ -474,7 +558,7 @@ fn linux_access(hidraw: &Hidraw) -> Verdict {
                  not.",
                 hidraw.openable, hidraw.present
             ),
-            fix: udev_fix(&hidraw.blocked_vendors),
+            fix: udev_fix(hidraw),
         };
     }
     // Not "all 1 attached HID device", which is what a count alone gives for
@@ -493,14 +577,30 @@ fn linux_access(hidraw: &Hidraw) -> Verdict {
 /// wildcard would hand the logged-in user everything on the bus — so a
 /// peripheral from a vendor not in that list needs a line, and this is that
 /// line with the digits already filled in.
-fn udev_fix(blocked_vendors: &[u16]) -> Vec<String> {
-    let mut steps = vec![
-        "Install the udev rules this project ships: sudo cp \
-         packaging/linux/udev/70-roadie.rules /etc/udev/rules.d/"
-            .to_owned(),
-    ];
-    let lines = udev_lines(blocked_vendors);
+fn udev_fix(hidraw: &Hidraw) -> Vec<String> {
+    let mut steps = Vec::new();
+    // Whether any step below changes the rules, which is what reloading and
+    // replugging are for. Advice to reload rules nobody changed is noise.
+    let mut rules_change = false;
+    if !hidraw.rules_installed {
+        steps.push(
+            "Install the udev rules this project ships: sudo cp \
+             packaging/linux/udev/70-roadie.rules /etc/udev/rules.d/"
+                .to_owned(),
+        );
+        rules_change = true;
+    } else if hidraw.blocked_covered > 0 && hidraw.remote {
+        steps.push(
+            "The udev rules this project ships are installed, and they grant access to \
+             whoever is signed in at this computer itself. This session is remote, over \
+             SSH for instance, so they do not apply to it. Run roadie from a session at \
+             the computer, or put sudo in front of it for a one-off check."
+                .to_owned(),
+        );
+    }
+    let lines = udev_lines(&hidraw.blocked_vendors);
     if !lines.is_empty() {
+        rules_change = true;
         steps.push(format!(
             "Those rules name the vendors this program drives, and the {} not among \
              them. Put {} in /etc/udev/rules.d/71-roadie-local.rules — a separate \
@@ -518,16 +618,20 @@ fn udev_fix(blocked_vendors: &[u16]) -> Vec<String> {
         ));
         steps.extend(lines.into_iter().map(|line| format!("    {line}")));
     }
-    steps.push(
-        "Reload the rules without rebooting: sudo udevadm control --reload-rules && \
-         sudo udevadm trigger"
-            .to_owned(),
-    );
-    steps.push(
-        "Unplug the device and plug it back in — a rule applies when a device appears, \
-         so one already attached keeps the permissions it was given."
-            .to_owned(),
-    );
+    if rules_change {
+        steps.push(
+            "Reload the rules without rebooting: sudo udevadm control --reload-rules && \
+             sudo udevadm trigger"
+                .to_owned(),
+        );
+    }
+    if rules_change || !hidraw.remote {
+        steps.push(
+            "Unplug the device and plug it back in — a rule applies when a device \
+             appears, so one already attached keeps the permissions it was given."
+                .to_owned(),
+        );
+    }
     steps.push("Run roadie doctor again to confirm.".to_owned());
     steps
 }
@@ -879,6 +983,9 @@ mod tests {
                 openable: 4,
                 writable: 4,
                 blocked_vendors: Vec::new(),
+                blocked_covered: 0,
+                rules_installed: true,
+                remote: false,
             }),
             agent_reachable: true,
             config: Some(PathBuf::from("/home/me/.config/roadie/config.toml")),
@@ -1024,6 +1131,9 @@ mod tests {
             openable: 0,
             writable: 0,
             blocked_vendors: Vec::new(),
+            blocked_covered: 0,
+            rules_installed: false,
+            remote: false,
         });
         facts.hid_devices = 0;
         facts.cameras = 0;
@@ -1073,8 +1183,12 @@ mod tests {
             present: 2,
             openable: 0,
             writable: 0,
-            // Elgato and a made-up macro pad vendor.
-            blocked_vendors: vec![0x0fd9, 0x4653],
+            // A blocked Elgato deck, which the shipped rules already name, and
+            // a VIA macro pad from a vendor they cannot.
+            blocked_vendors: vec![0x4653],
+            blocked_covered: 1,
+            rules_installed: true,
+            remote: false,
         });
         facts.hid_devices = 0;
         facts.cameras = 0;
@@ -1085,10 +1199,12 @@ mod tests {
         };
         let steps = fix.join("\n");
         assert!(
-            steps.contains(r#"ATTRS{idVendor}=="0fd9""#),
+            steps.contains(r#"ATTRS{idVendor}=="4653""#),
             "the vendor id has to be in the line, in lower-case hex: {steps}"
         );
-        assert!(steps.contains(r#"ATTRS{idVendor}=="4653""#), "{steps}");
+        // This was once offered for Elgato, whose line the shipped rules
+        // already carry: advice already followed, handed out again as a fix.
+        assert!(!steps.contains(r#""0fd9""#), "{steps}");
         assert!(
             steps.contains(r#"SUBSYSTEM=="hidraw""#),
             "a line that is not a valid rule is worse than no line: {steps}"
@@ -1187,6 +1303,9 @@ mod tests {
             openable: 0,
             writable: 0,
             blocked_vendors: Vec::new(),
+            blocked_covered: 0,
+            rules_installed: false,
+            remote: false,
         });
         facts.hid_devices = 0;
         facts.cameras = 0;
@@ -1215,7 +1334,12 @@ mod tests {
             present: 4,
             openable: 2,
             writable: 2,
-            blocked_vendors: vec![0x0fd9],
+            // The Kiiboom Cybrix 16's vendor: a VIA board the shipped rules
+            // cannot name.
+            blocked_vendors: vec![0x5343],
+            blocked_covered: 0,
+            rules_installed: true,
+            remote: false,
         });
         let checks = diagnose(&facts);
         let Verdict::Problem { detail, fix } = find(&checks, "Permission to open devices") else {
@@ -1226,9 +1350,80 @@ mod tests {
         // installed and working for some devices, so "install the udev rules"
         // alone would read as advice already followed.
         assert!(
-            fix.iter().any(|step| step.contains(r#""0fd9""#)),
+            fix.iter().any(|step| step.contains(r#""5343""#)),
             "it has to name the vendor that is actually blocked: {fix:?}"
         );
+        assert!(
+            !fix.iter()
+                .any(|step| step.contains("Install the udev rules")),
+            "the rules are installed; saying otherwise is advice already followed: {fix:?}"
+        );
+    }
+
+    /// Found on a headless Ubuntu box over SSH, 2026-11-03: the rules were
+    /// installed and named Logitech, and `doctor` told the user to install
+    /// them and add a Logitech line anyway.
+    #[test]
+    fn installed_rules_over_ssh_are_explained_rather_than_reinstalled() {
+        let mut facts = healthy();
+        facts.hidraw = Some(Hidraw {
+            present: 3,
+            openable: 0,
+            writable: 0,
+            blocked_vendors: Vec::new(),
+            blocked_covered: 3,
+            rules_installed: true,
+            remote: true,
+        });
+        facts.hid_devices = 0;
+        facts.cameras = 0;
+        let checks = diagnose(&facts);
+        let Verdict::Problem { fix, .. } = find(&checks, "Permission to open devices") else {
+            panic!("unopenable devices must be a problem");
+        };
+        let steps = fix.join("\n");
+        assert!(steps.contains("This session is remote"), "{steps}");
+        assert!(steps.contains("sudo"), "{steps}");
+        assert!(!steps.contains("Install the udev rules"), "{steps}");
+        assert!(!steps.contains("71-roadie-local.rules"), "{steps}");
+        assert!(
+            !steps.contains("udevadm"),
+            "nothing changed the rules: {steps}"
+        );
+    }
+
+    #[test]
+    fn the_shipped_vendor_list_is_what_the_rules_file_grants() {
+        let rules = include_str!("../../../../packaging/linux/udev/70-roadie.rules");
+        for vendor in super::SHIPPED_HIDRAW_VENDORS {
+            let line = format!(r#"SUBSYSTEM=="hidraw", ATTRS{{idVendor}}=="{vendor:04x}""#);
+            assert!(rules.contains(&line), "{line} is not in 70-roadie.rules");
+        }
+        let granted = rules
+            .lines()
+            .filter(|line| line.starts_with(r#"SUBSYSTEM=="hidraw", ATTRS{idVendor}"#))
+            .count();
+        assert_eq!(
+            granted,
+            super::SHIPPED_HIDRAW_VENDORS.len(),
+            "a vendor was added there only"
+        );
+    }
+
+    #[test]
+    fn a_via_board_is_recognised_by_its_usage_page_item_only() {
+        use super::declares_via_page;
+        // Usage Page 0xFF60, Usage 0x61, as QMK's raw HID descriptor opens.
+        assert!(declares_via_page(&[
+            0x06, 0x60, 0xff, 0x09, 0x61, 0xa1, 0x01
+        ]));
+        // A generic mouse: Usage Page 0x01.
+        assert!(!declares_via_page(&[0x05, 0x01, 0x09, 0x02, 0xa1, 0x01]));
+        // The same three bytes inside a four-byte Logical Maximum's data are
+        // data, not a Usage Page item.
+        assert!(!declares_via_page(&[0x27, 0x06, 0x60, 0xff, 0x00]));
+        // A truncated descriptor is not a VIA board, nor a panic.
+        assert!(!declares_via_page(&[0x06, 0x60]));
     }
 
     /// A container or VM with no USB passed through. Not a fault, and calling
@@ -1241,6 +1436,9 @@ mod tests {
             openable: 0,
             writable: 0,
             blocked_vendors: Vec::new(),
+            blocked_covered: 0,
+            rules_installed: true,
+            remote: false,
         });
         let checks = diagnose(&facts);
         let Verdict::Undetermined(detail) = find(&checks, "Permission to open devices") else {
@@ -1350,6 +1548,9 @@ mod tests {
             openable: 0,
             writable: 0,
             blocked_vendors: Vec::new(),
+            blocked_covered: 0,
+            rules_installed: true,
+            remote: false,
         });
         facts.hid_devices = 0;
         facts.cameras = 0;
@@ -1373,6 +1574,9 @@ mod tests {
             openable: 0,
             writable: 0,
             blocked_vendors: Vec::new(),
+            blocked_covered: 0,
+            rules_installed: false,
+            remote: false,
         });
         facts.hid_devices = 0;
         facts.cameras = 0;
@@ -1408,6 +1612,9 @@ mod tests {
                         openable: 0,
                         writable: 0,
                         blocked_vendors: vec![0x0fd9],
+                        blocked_covered: 0,
+                        rules_installed: true,
+                        remote: false,
                     }),
                     hid_devices: 0,
                     cameras: 0,
@@ -1423,6 +1630,9 @@ mod tests {
                         openable: 1,
                         writable: 1,
                         blocked_vendors: vec![0x046d],
+                        blocked_covered: 0,
+                        rules_installed: true,
+                        remote: false,
                     }),
                     ..healthy()
                 },
@@ -1505,6 +1715,9 @@ mod tests {
             openable: 3,
             writable: 1,
             blocked_vendors: Vec::new(),
+            blocked_covered: 0,
+            rules_installed: true,
+            remote: false,
         });
         let checks = diagnose(&facts);
         let access = checks
@@ -1539,6 +1752,9 @@ mod tests {
             openable: 3,
             writable: 3,
             blocked_vendors: Vec::new(),
+            blocked_covered: 0,
+            rules_installed: true,
+            remote: false,
         });
         let checks = diagnose(&facts);
         let access = checks
@@ -1562,6 +1778,9 @@ mod tests {
             openable: 0,
             writable: 0,
             blocked_vendors: vec![0x0fd9],
+            blocked_covered: 0,
+            rules_installed: true,
+            remote: false,
         });
         facts.hid_devices = 0;
         facts.cameras = 0;
@@ -1608,6 +1827,9 @@ mod tests {
             openable: 0,
             writable: 0,
             blocked_vendors: Vec::new(),
+            blocked_covered: 0,
+            rules_installed: true,
+            remote: false,
         });
         facts.hid_devices = 0;
         facts.cameras = 0;
@@ -1629,6 +1851,9 @@ mod tests {
                     openable: 0,
                     writable: 0,
                     blocked_vendors: Vec::new(),
+                    blocked_covered: 0,
+                    rules_installed: true,
+                    remote: false,
                 }),
                 hid_devices: 0,
                 cameras: 0,
@@ -1641,6 +1866,9 @@ mod tests {
                     openable: 1,
                     writable: 1,
                     blocked_vendors: Vec::new(),
+                    blocked_covered: 0,
+                    rules_installed: true,
+                    remote: false,
                 }),
                 ..healthy()
             },
