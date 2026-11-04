@@ -237,7 +237,12 @@ impl DeskPanel {
                 // carries the value so it is heard on the way to the buttons.
                 a11y::group(
                     "gain-steps",
-                    format!("{}, {}", tr!("Gain"), describe_gain(Some(gain))),
+                    format!(
+                        "{}, {}, {}",
+                        tr!("Input %{number}", number = input),
+                        tr!("Gain"),
+                        describe_gain(Some(gain))
+                    ),
                 )
                 .flex()
                 .gap_2()
