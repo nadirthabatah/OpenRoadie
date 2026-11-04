@@ -1246,8 +1246,26 @@ The T3 Code app on this PC brings no Linux of its own: its `wsl-runtime` is
 its server, installed into WSL. WSL with WSLg is the Linux to test in.
 
 Windows audits and the Orca run both came back clean on the home window,
-the desk, the mouse tabs, Settings and Add Device. Not yet tried with a
-person on NVDA or Narrator, nor watched with Magnifier following focus.
+the desk, the mouse tabs, Settings and Add Device. Real NVDA (portable
+2026.3, silent synth, `--debug-logging`, keys sent from a script) then
+read the update dialog, the home window, a keyboard's lighting page
+(colours by name, the checked one said) and every Settings tab, switch
+and slider as intended. Not yet tried with a person on NVDA or Narrator,
+nor watched with Magnifier following focus.
+
+- **NVDA started after the window has focus hears nothing.** GPUI's
+  Windows backend shows and activates the window before it builds the
+  AccessKit adapter, drops that `WM_ACTIVATE`, and seeds the adapter from
+  `GetForegroundWindow()` — measured 30 ms before the window actually came
+  to the front. The adapter then believes the window is unfocused and no
+  focus events are raised until the window is switched away from and back.
+  NVDA already running when the app opens, and windows opened later
+  (Settings), are fine. Upstream is `gpui_windows`
+  (zed-industries/zed); a drafted issue waits for Nadir's go-ahead. A
+  script testing with NVDA has to switch away and back first, or it will
+  report silence that a person would not get from a normal launch.
+- **Two OpenRoadie windows confuse a scripted NVDA run:** pick the window
+  by process and confirm it is the foreground window before sending keys.
 
 ## 7. What a session can do with nobody at the desk
 
