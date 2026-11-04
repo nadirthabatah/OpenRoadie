@@ -1184,15 +1184,39 @@ What was learned, so nobody relearns it:
   with yellow (dark) or deep blue (light) for selection. It replaces the
   chosen themes when Settings, Appearance, High contrast is On, or when the
   OS asks for it: Windows contrast themes (`SPI_GETHIGHCONTRAST`), GNOME's
-  high-contrast switch or a `HighContrast` GTK theme. macOS Increase
-  Contrast is not read yet. The fixed brand accent (`theme::accent`) still
-  draws selection borders and is pale on the light pair.
+  high-contrast switch or a `HighContrast` GTK theme, macOS Increase
+  Contrast. `theme::accent` follows it, so selection and focus outlines
+  take the pair's highlight instead of the brand blue.
 - **Text size.** The interface scale multiplies by Windows' "Make text
   bigger" and GNOME's text scaling factor, read once at launch.
-- Linux and Windows audits both came back clean on the home window, the
-  desk, the mouse tabs, Settings and Add Device. Not yet tried with a human
-  on NVDA, Narrator or Orca, nor with the Magnifier following focus. The
-  next sitting should do that first.
+- **Settings search** is the app's own, above the page tabs: it narrows the
+  tabs to pages whose title or settings match. Each page's setting titles
+  are listed in `settings_pages`, beside the pages; keep them in step.
+
+**Orca, driven from the keyboard.** Orca runs in the WSL Ubuntu with its
+debug log on, the app under X11 (`WAYLAND_DISPLAY` unset) so `xdotool` can
+type into it, and the mock agent. Everything Orca would have said is in the
+log as `SPEECH OUTPUT`. That found what tree audits could not:
+
+- **Focus was lost on every page change.** Opening a device, or leaving one,
+  removed the focused control; Orca went silent and Tab had nowhere to start.
+  The main window now moves focus to the new page's title (`PageFocus`), and
+  the desk focuses its heading when it opens.
+- **A GPUI focus handle is not a Tab stop unless it says so.** Every slider
+  in `ui/a11y.rs` was focusable and never reached by Tab.
+- **Remapping a button** now moves focus from the button to its current
+  action, and back there when the action list closes.
+- **Still open, in gpui-component:** its text input names a frame node but
+  focuses an inner element with no node, so Tab into any search or text
+  field announces the window around it. Its `Select` exposes no name and no
+  value; each sits in a group named for its setting and current choice.
+
+The T3 Code app on this PC brings no Linux of its own: its `wsl-runtime` is
+its server, installed into WSL. WSL with WSLg is the Linux to test in.
+
+Windows audits and the Orca run both came back clean on the home window,
+the desk, the mouse tabs, Settings and Add Device. Not yet tried with a
+person on NVDA or Narrator, nor watched with Magnifier following focus.
 
 ## 7. What a session can do with nobody at the desk
 
