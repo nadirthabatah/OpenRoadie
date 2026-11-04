@@ -70,6 +70,7 @@ objc2 = { workspace = true }
 objc2-app-kit = { workspace = true, features = ["NSAccessibility", "NSApplication", "NSAppearance", "NSWorkspace"] }
 objc2-foundation = { workspace = true, features = ["NSProcessInfo", "NSString", "NSError"] }
 objc2-service-management = { workspace = true, features = ["std", "SMAppService", "SMErrors", "objc2", "objc2-foundation"] }
+accesskit_macos = { workspace = true }
 
 # The OS high-contrast and text-size settings (`platform::os`).
 [target.'cfg(target_os = "windows")'.dependencies]
