@@ -1287,6 +1287,13 @@ person on NVDA or Narrator.
   Narrator names only the innermost group it enters, so two decks'
   "Screen brightness" and two inputs' "Gain" sounded alike. Those inner
   groups now carry the deck or input name.
+- **The AT-SPI audit over every screen** (each mock device and tab, the
+  desk, every Settings page, Add Device, the device menu) found every
+  control named. One library gap remains: gpui-kit's component `Button`
+  never marks its node disabled (`base::Button` does), so a disabled one
+  reads as enabled in review mode; Tab skips it either way. It is in the
+  drafted gpui-kit issue. Menu items flag as unfocusable in that audit
+  because a menu moves focus by active descendant; Orca reads them.
 
 ## 7. What a session can do with nobody at the desk
 
