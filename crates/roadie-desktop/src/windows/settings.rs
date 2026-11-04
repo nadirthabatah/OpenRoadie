@@ -118,6 +118,10 @@ pub struct SettingsView {
     /// The page on show, as an index into [`settings_pages`]. Starts at the page
     /// the window was opened on; an already-open window is just focused.
     page_ix: usize,
+    /// One per page tab, owned here so the chosen tab can be given focus back
+    /// after the page changes; the rebuilt page otherwise left focus on
+    /// nothing, and a screen reader went silent.
+    tab_focus: Vec<FocusHandle>,
     language_select: Entity<SelectState<Vec<language::LanguageOption>>>,
     asset_source_select: Entity<SelectState<Vec<assets::AssetSourceOption>>>,
     thumbwheel_sensitivity_slider: Entity<SliderState>,
@@ -271,6 +275,7 @@ impl SettingsView {
             theme_search,
             page_search,
             page_ix: initial_page.index(),
+            tab_focus: (0..8).map(|_| cx.focus_handle().tab_stop(true)).collect(),
             language_select,
             asset_source_select,
             thumbwheel_sensitivity_slider,
@@ -590,7 +595,7 @@ impl Render for SettingsView {
                 h_flex()
                     .size_full()
                     .items_stretch()
-                    .child(page_list(&pages, &shown, page_ix, &self.page_search, pal, cx))
+                    .child(page_list(&pages, &shown, page_ix, &self.page_search, &self.tab_focus, pal, cx))
                     .child(div().flex_1().min_w_0().h_full().child(settings)),
             )
     }
@@ -713,6 +718,7 @@ fn page_list(
     shown: &[usize],
     active: usize,
     search: &Entity<InputState>,
+    tab_focus: &[FocusHandle],
     pal: Palette,
     cx: &mut Context<SettingsView>,
 ) -> impl IntoElement {
@@ -733,7 +739,7 @@ fn page_list(
                     .child(gpui::text!(tr!("No settings match"))),
             )
         })
-        .child(page_tabs(pages, shown, active, pal, cx))
+        .child(page_tabs(pages, shown, active, tab_focus, pal, cx))
 }
 
 /// The tabs of [`page_list`], for the pages in `shown`.
@@ -741,6 +747,7 @@ fn page_tabs(
     pages: &[PageEntry],
     shown: &[usize],
     active: usize,
+    tab_focus: &[FocusHandle],
     pal: Palette,
     cx: &mut Context<SettingsView>,
 ) -> impl IntoElement {
@@ -756,6 +763,7 @@ fn page_tabs(
                 .map(|(ix, title, icon)| {
                     let selected = ix == active;
                     gpui_base::Button::new(("settings-page", ix))
+                        .when_some(tab_focus.get(ix), gpui_base::Button::track_focus)
                         .role(gpui::Role::Tab)
                         .selected(selected)
                         .accessibility_label(title.clone())
@@ -778,8 +786,13 @@ fn page_tabs(
                         .focus_visible(move |row| row.border_1().border_color(pal.text_primary))
                         .child(Icon::new(icon).size_4().flex_none())
                         .child(title)
-                        .on_click(cx.listener(move |view, _, _, cx| {
+                        .on_click(cx.listener(move |view, _, window, cx| {
                             view.page_ix = ix;
+                            if let Some(focus) = view.tab_focus.get(ix).cloned() {
+                                cx.on_next_frame(window, move |_, window, cx| {
+                                    focus.focus(window, cx);
+                                });
+                            }
                             cx.notify();
                         }))
                 }),
