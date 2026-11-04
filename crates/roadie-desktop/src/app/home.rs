@@ -33,7 +33,7 @@ use roadie_core::hid::DeviceRoute;
 use super::AppView;
 use super::status::{loading_body, notice_body};
 use super::widgets::{
-    add_device_button, connectivity_dot, kind_label, route_label, settings_button,
+    add_device_button, connectivity_dot, desk_button, kind_label, route_label, settings_button,
 };
 use crate::features::lighting::visual as light_visual;
 use crate::services::assets::GlowGeometry;
@@ -78,6 +78,7 @@ pub(super) fn home_header(cx: &mut Context<AppView>) -> impl IntoElement {
                 ),
         )
         .child(views::device_view_switcher(current_mode, view))
+        .child(desk_button())
         .child(settings_button())
         .child(add_device_button())
 }

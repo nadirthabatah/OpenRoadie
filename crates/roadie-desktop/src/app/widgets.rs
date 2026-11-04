@@ -41,6 +41,22 @@ pub(super) fn settings_button() -> impl IntoElement {
         .on_click(|_, _, cx| crate::windows::settings::open(cx))
 }
 
+/// Opens the desk panel: Stream Decks, monitors, lights, audio interfaces,
+/// TourBoxes and VIA boards — everything that is not a paired Logitech device.
+///
+/// A header button and not only a menu item, because the menu bar exists on
+/// macOS alone. On Windows the menu entry was the panel's only door, so every
+/// one of those families was unreachable from the app; found running it on
+/// Windows on 2026-11-04.
+pub(super) fn desk_button() -> impl IntoElement {
+    Button::new("home-desk")
+        .outline()
+        .icon(IconName::LayoutDashboard)
+        .label(crate::features::desk::view::window_title())
+        .tooltip(crate::features::desk::view::window_title())
+        .on_click(|_, _, cx| crate::features::desk::view::open(cx))
+}
+
 /// Primary action that opens the pairing window. The empty state carries its
 /// own equivalent CTA, so this never floats alone in an empty header.
 pub(super) fn add_device_button() -> impl IntoElement {
