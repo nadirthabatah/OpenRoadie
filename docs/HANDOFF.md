@@ -1274,6 +1274,14 @@ person on NVDA or Narrator.
   is a status with no Tab stop; Orca's review commands read it.
 - **`/sys/bus/usb` is absent in WSL** as `/sys/class/hidraw` is, and the
   Focusrite listing failed there the same way; it now lists nothing.
+- **Narrator, which keeps no log, was heard instead:** a WASAPI loopback
+  recorder captured the speakers while keys were sent, and Windows speech
+  recognition transcribed it (scratchpad scripts `loopback.cs` and
+  `narrator-test.ps1`; recording its ETW provider needs an administrator).
+  Home, a keyboard page, Settings and the desk all read. It found one gap:
+  Narrator names only the innermost group it enters, so two decks'
+  "Screen brightness" and two inputs' "Gain" sounded alike. Those inner
+  groups now carry the deck or input name.
 
 ## 7. What a session can do with nobody at the desk
 
