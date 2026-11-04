@@ -204,17 +204,16 @@ fn enumerate_under(root: &Path) -> Result<Vec<Display>, DisplayError> {
             .as_ref()
             .map_or_else(|| id.as_str().to_owned(), Edid::describe);
 
-        let backend = match i2c_node(&connector) {
-            Some(node) => match I2cBus::open(&node, name.clone()) {
+        let node = match i2c_node(&connector) {
+            Some(node) => Ok(node),
+            None => i2c_by_edid(&connector),
+        };
+        let backend = match node {
+            Ok(node) => match I2cBus::open(&node, name.clone()) {
                 Ok(bus) => crate::backend::boxed(Ddc::new(bus)),
                 Err(reason) => Unreachable::boxed(name, reason),
             },
-            None => Unreachable::boxed(
-                name,
-                "the graphics driver published no I2C line for this connector, so it \
-                 cannot be controlled over DDC on this machine"
-                    .to_owned(),
-            ),
+            Err(reason) => Unreachable::boxed(name, reason),
         };
         displays.push(Display::new(id, edid, backend));
     }
@@ -264,6 +263,128 @@ fn i2c_node(connector: &Path) -> Option<PathBuf> {
         })
     };
     named(connector.join("ddc").join("i2c-dev")).or_else(|| named(connector.to_path_buf()))
+}
+
+/// Where the kernel lists every I²C character device.
+const I2C_DEV: &str = "/sys/class/i2c-dev";
+
+/// Where a display answers EDID reads on its DDC bus.
+const EDID_ADDRESS: u16 = 0x50;
+
+/// What is said when a connector has no DDC line by either route.
+const NO_LINE: &str = "the graphics driver published no I2C line for this connector, so it \
+                       cannot be controlled over DDC on this machine";
+
+/// Find a connector's DDC bus by its EDID, for a driver that does not link it.
+///
+/// NVIDIA's proprietary driver creates an I²C adapter for every output but
+/// publishes no `ddc` link from the connector to it — found on an RTX 3060
+/// under Ubuntu 26.04, 2026-11-03, where every monitor was named and none
+/// could be reached. The way back is the one ddcutil takes: read the EDID off
+/// each candidate bus and keep the one that matches the block the kernel
+/// already published for the connector.
+///
+/// Only buses whose adapter hangs off the connector's own graphics card are
+/// candidates. A motherboard SMBus also answers at `0x50` — that is where a
+/// memory module's SPD EEPROM lives — and nothing here has any business
+/// writing an offset to one.
+///
+/// # Errors
+///
+/// A sentence for the display when no bus matches: the permission sentence
+/// when a candidate could not be opened, since that is the likely cause and
+/// the one that can be fixed, and [`NO_LINE`] otherwise.
+fn i2c_by_edid(connector: &Path) -> Result<PathBuf, String> {
+    let wanted = fs::read(connector.join("edid")).unwrap_or_default();
+    let Some(wanted) = wanted.get(..128) else {
+        return Err(NO_LINE.to_owned());
+    };
+    let Some(card) = fs::canonicalize(connector)
+        .ok()
+        .and_then(|path| graphics_card(&path).map(Path::to_path_buf))
+    else {
+        return Err(NO_LINE.to_owned());
+    };
+    let mut refused = None;
+    for (node, adapter) in i2c_adapters() {
+        if adapter.parent() != Some(card.as_path()) {
+            continue;
+        }
+        match read_edid_from(&node) {
+            Ok(found) if found == wanted => return Ok(node),
+            Err(error) if error.raw_os_error() == Some(libc::EACCES) => {
+                refused = Some(format!("{}: {}", node.display(), explain(&error)));
+            }
+            // Another output's display, or a bus with nothing on it.
+            _ => {}
+        }
+    }
+    Err(refused.unwrap_or_else(|| NO_LINE.to_owned()))
+}
+
+/// The graphics card a connector belongs to: the directory above the `drm`
+/// component of its resolved sysfs path, such as
+/// `/sys/devices/pci0000:00/0000:00:01.0/0000:01:00.0`.
+fn graphics_card(connector: &Path) -> Option<&Path> {
+    connector
+        .ancestors()
+        .find(|path| path.file_name().is_some_and(|name| name == "drm"))
+        .and_then(Path::parent)
+}
+
+/// Every `/dev/i2c-N`, with its adapter's resolved sysfs directory.
+fn i2c_adapters() -> Vec<(PathBuf, PathBuf)> {
+    let Ok(entries) = fs::read_dir(I2C_DEV) else {
+        return Vec::new();
+    };
+    let mut adapters: Vec<(PathBuf, PathBuf)> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let adapter = fs::canonicalize(entry.path().join("device")).ok()?;
+            Some((PathBuf::from("/dev").join(entry.file_name()), adapter))
+        })
+        .collect();
+    adapters.sort();
+    adapters
+}
+
+/// Read a display's 128-byte EDID base block off one bus: write offset 0 to
+/// address `0x50`, then read, as one `I2C_RDWR` so nothing can come between.
+#[expect(
+    unsafe_code,
+    reason = "I2C_RDWR is an ioctl; there is no safe wrapper for it in this graph"
+)]
+fn read_edid_from(node: &Path) -> io::Result<[u8; 128]> {
+    let file = OpenOptions::new().read(true).write(true).open(node)?;
+    let mut offset = [0_u8];
+    let mut block = [0_u8; 128];
+    let mut messages = [
+        I2cMsg {
+            addr: EDID_ADDRESS,
+            flags: 0,
+            len: 1,
+            buf: offset.as_mut_ptr(),
+        },
+        I2cMsg {
+            addr: EDID_ADDRESS,
+            flags: I2C_M_RD,
+            len: 128,
+            buf: block.as_mut_ptr(),
+        },
+    ];
+    let mut data = I2cRdwrData {
+        msgs: messages.as_mut_ptr(),
+        nmsgs: 2,
+    };
+    // SAFETY: `file` is open for the whole call. `data` points at two
+    // `I2cMsg`s that outlive it, whose `buf`s point at `offset` (1 byte) and
+    // `block` (128 bytes), matching their `len`s exactly. Both structs are
+    // `repr(C)` with the kernel's own layout.
+    let result = unsafe { libc::ioctl(file.as_raw_fd(), I2C_RDWR, &raw mut data) };
+    if result < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(block)
 }
 
 #[cfg(test)]

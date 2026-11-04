@@ -1,6 +1,6 @@
 use std::fs;
 
-use super::{connected, i2c_node, read_edid};
+use super::{connected, graphics_card, i2c_node, read_edid};
 
 /// A throwaway directory shaped like one of the kernel's connector
 /// directories.
@@ -287,4 +287,38 @@ fn a_machine_with_no_display_subsystem_reports_none_rather_than_failing() {
             "every display in the list has something to call it"
         );
     }
+}
+
+/// Paths as this desk's RTX 3060 published them under Ubuntu 26.04.
+#[test]
+fn a_connector_belongs_to_the_card_above_its_drm_directory() {
+    let connector = std::path::Path::new(
+        "/sys/devices/pci0000:00/0000:00:01.0/0000:01:00.0/drm/card1/card1-HDMI-A-1",
+    );
+    assert_eq!(
+        graphics_card(connector),
+        Some(std::path::Path::new(
+            "/sys/devices/pci0000:00/0000:00:01.0/0000:01:00.0"
+        ))
+    );
+    // A platform I2C controller has no drm directory above it at all.
+    assert_eq!(
+        graphics_card(std::path::Path::new(
+            "/sys/devices/platform/i2c_designware.0/i2c-0"
+        )),
+        None
+    );
+}
+
+/// The safety property: an SMBus at `0x50` is a memory module's SPD EEPROM,
+/// and its adapter's parent is the chipset, never the graphics card.
+#[test]
+fn only_a_bus_on_the_connectors_own_card_is_a_candidate() {
+    let card = graphics_card(std::path::Path::new(
+        "/sys/devices/pci0000:00/0000:00:01.0/0000:01:00.0/drm/card1/card1-HDMI-A-1",
+    ));
+    let nvidia = std::path::Path::new("/sys/devices/pci0000:00/0000:00:01.0/0000:01:00.0/i2c-4");
+    let smbus = std::path::Path::new("/sys/devices/pci0000:00/0000:00:1f.4/i2c-3");
+    assert_eq!(nvidia.parent(), card);
+    assert_ne!(smbus.parent(), card);
 }
