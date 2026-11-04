@@ -24,6 +24,16 @@ use gpui_component::{ActiveTheme as _, Root, TitleBar};
 use roadie_core::brand::APP_ID;
 use tracing::warn;
 
+/// Whether a window is shown as it is created, rather than by the
+/// `activate_window` call that follows every open here.
+///
+/// Not on Windows: GPUI shows and activates a window there before it builds
+/// the window's accessibility adapter and drops the activation that lands in
+/// between, so a screen reader started later is never told the window has
+/// focus and hears nothing in it. Shown by `activate_window` instead, the
+/// activation arrives once the adapter exists.
+pub(crate) const SHOW_ON_OPEN: bool = !cfg!(target_os = "windows");
+
 /// One live handle per auxiliary window, stored as a GPUI global so the menu
 /// actions and footer links can find an already-open window and focus it.
 #[derive(Default)]
@@ -145,6 +155,7 @@ pub fn open_or_focus<V: AuxWindow + 'static>(
         // own `gnome_shell` frontmost backend.
         app_id: Some(APP_ID.into()),
         titlebar: Some(titlebar_options(title.clone())),
+        show: SHOW_ON_OPEN,
         ..WindowOptions::default()
     };
 
