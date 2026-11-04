@@ -1086,6 +1086,46 @@ Four findings worth keeping:
   answered on HID++: battery, DPI 1000 to 1050 and back, SmartShift ratchet
   to free and back, and the backlight read.
 
+### 6.14 The first Linux sitting, 2026-11-03
+
+A headless Ubuntu 26.04 box (`ubuntu-3060`, kernel 7.0), reached from the
+Windows PC over Tailscale SSH with a key authorised for it. Rust and the
+build tools were installed there; the repository is public, so it clones
+with no sign-in. The first native Linux run of anything in this fork.
+
+Attached there: a Logitech Nano receiver `c534` from a cheap combo, with a
+keyboard (wpid `4023`, firmware RQK49) and a mouse (wpid `4091`, RQM70).
+
+- **`c534` was missing from the receiver table.** Solaar files it beside
+  `c537`, which was present, differing only in holding two devices. With
+  the entry, both slots enumerate.
+- **The keyboard's features:** battery (`0x1000`, read as 30 percent and
+  discharging), special keys (`0x1b00`), Fn inversion (`0x40a0`), layout
+  (`0x4520`), no backlight.
+- **The mouse's features:** reprogrammable controls (`0x1b04` v4),
+  adjustable DPI (`0x2201`), low-res wheel (`0x2130`), and no battery
+  feature at all, which is why its battery reads as unknown. DPI is not yet
+  exercised: it sleeps within seconds of stopping, and a sleeping device
+  cannot be addressed by name.
+- **A dozing device is reported as lacking features.** One feature dump in
+  four succeeded; the others said the mouse "does not expose" `0x0001`,
+  which it had just listed, or decoded an error as `InvalidFunctionId`. A
+  sleep, a busy reply, and a missing feature must not share one sentence.
+  Not fixed yet.
+- **`list` says "Unknown device" where `diag` reads "Wireless Mouse".**
+  Not fixed yet.
+- Fixed: `doctor` advised installed rules again, a Logitech line the rules
+  already carry, and opening an ASUS RGB controller; it now counts only
+  drivable nodes and explains remote sessions. `list` printed macOS notes,
+  a stale Bolt-only claim, and a dozen retry warnings. `devices` claimed
+  the family's full feature range for every Logitech device and monitor.
+- **The TourBox had no udev rule** for its serial node; it has one now,
+  scoped to `c251:2005`.
+- **`uaccess` grants nothing over SSH**, which is the normal way into a
+  headless box. Device checks there ran under `sudo`; `doctor` says so.
+- Native on Ubuntu: fmt, the CI Linux test set, non-GUI clippy and the
+  shell job all pass.
+
 ## 7. What a session can do with nobody at the desk
 
 Nadir travels, and a session that stalls waiting for a monitor to be plugged in
