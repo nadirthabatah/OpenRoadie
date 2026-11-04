@@ -483,8 +483,13 @@ fn open_rename_dialog(
             cx.emit(StateEvent::InventoryChanged);
         });
     });
+    // The builder runs on every frame. Focusing the field in it pulled focus
+    // back each frame, so Tab could never leave; the field is focused once.
+    let focus_field = std::rc::Rc::new(std::cell::Cell::new(true));
     window.open_dialog(cx, move |dialog, window, cx| {
-        input.update(cx, |input, cx| input.focus(window, cx));
+        if focus_field.replace(false) {
+            input.update(cx, |input, cx| input.focus(window, cx));
+        }
         // The dialog's own title is text no screen reader reaches, and with
         // `button_props` alone it draws no buttons at all; its close button
         // has no name. A heading and two named buttons replace all three.
