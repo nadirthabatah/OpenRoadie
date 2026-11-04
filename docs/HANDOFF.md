@@ -1289,6 +1289,18 @@ person on NVDA or Narrator.
   reads as enabled in review mode; Tab skips it either way. It is in the
   drafted gpui-kit issue. Menu items flag as unfocusable in that audit
   because a menu moves focus by active descendant; Orca reads them.
+- **macOS, on a Mac Studio over SSH** (Rust 1.98 installed beside its default
+  1.87, never replacing it): Clippy and all 2,190 tests pass on both branches.
+  A Swift script run inside Terminal, which holds Accessibility there, pressed
+  Tab and read the focused element the way VoiceOver does. The tree was right
+  from the start, but asking the app or window for `AXFocusedUIElement` got
+  the window back: gpui never installs AccessKit's window focus forwarder.
+  `platform::os::forward_window_focus` installs it at startup; focus then
+  reads Grid, List, Carousel, each device, the page heading, the tabs and every
+  button binding. Opening windows hidden is not needed on macOS (tested).
+  `cargo run`'s dev bundle failed there compiling the `.icon` app icon, so the
+  binary was run directly; VoiceOver's own speech was not captured, since
+  automating VoiceOver needs a consent click on that Mac.
 
 ## 7. What a session can do with nobody at the desk
 
