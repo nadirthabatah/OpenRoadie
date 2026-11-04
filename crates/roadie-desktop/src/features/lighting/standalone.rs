@@ -447,12 +447,7 @@ fn control_well(
             h_flex()
                 .justify_between()
                 .items_baseline()
-                .child(
-                    div()
-                        .text_caption()
-                        .text_color(pal.text_muted)
-                        .child(gpui::text!(title)),
-                )
+                .child(div().text_caption().text_color(pal.text_muted).child(title))
                 .child(
                     div()
                         .text_body()

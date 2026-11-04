@@ -349,7 +349,7 @@ fn device_row(device: &FoundDevice, pal: Palette) -> impl IntoElement {
         .bg(pal.control)
         .hover(|s| s.bg(pal.control_hover))
         .focus_visible(|s| s.bg(pal.control_hover))
-        .child(div().text_body().child(gpui::text!(name)))
+        .child(div().text_body().child(name))
         .on_click(move |_, _, cx| send(cx, Command::PairDevice(address)))
 }
 
