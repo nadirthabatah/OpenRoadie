@@ -233,29 +233,34 @@ impl DeskPanel {
                 pal,
             ))
             .child(
-                a11y::group("gain-steps", tr!("Gain"))
-                    .flex()
-                    .gap_2()
-                    .child(Self::gain_button(
-                        id,
-                        input,
-                        key,
-                        "down",
-                        tr!("Turn down"),
-                        gain.saturating_sub(GAIN_STEP),
-                        busy,
-                        cx,
-                    ))
-                    .child(Self::gain_button(
-                        id,
-                        input,
-                        key,
-                        "up",
-                        tr!("Turn up"),
-                        gain.saturating_add(GAIN_STEP),
-                        busy,
-                        cx,
-                    )),
+                // The reading above is text, which Tab passes by; the steps' group
+                // carries the value so it is heard on the way to the buttons.
+                a11y::group(
+                    "gain-steps",
+                    format!("{}, {}", tr!("Gain"), describe_gain(Some(gain))),
+                )
+                .flex()
+                .gap_2()
+                .child(Self::gain_button(
+                    id,
+                    input,
+                    key,
+                    "down",
+                    tr!("Turn down"),
+                    gain.saturating_sub(GAIN_STEP),
+                    busy,
+                    cx,
+                ))
+                .child(Self::gain_button(
+                    id,
+                    input,
+                    key,
+                    "up",
+                    tr!("Turn up"),
+                    gain.saturating_add(GAIN_STEP),
+                    busy,
+                    cx,
+                )),
             )
     }
 
@@ -308,7 +313,7 @@ impl DeskPanel {
         let panel = cx.entity().downgrade();
         h_flex()
             .justify_between()
-            .child(div().text_caption().child(gpui::text!(tr!("Mute"))))
+            .child(div().text_caption().child(tr!("Mute")))
             .child(
                 Toggle::new(
                     ElementId::NamedInteger("desk-audio-mute".into(), key),
@@ -353,11 +358,10 @@ impl DeskPanel {
         let panel = cx.entity().downgrade();
         h_flex()
             .justify_between()
-            .child(
-                div()
+            .child(div()
+                    // Drawn, not read: the switch beside it carries the same words.
                     .text_caption()
-                    .child(gpui::text!(tr!("48 volt phantom power"))),
-            )
+                    .child(tr!("48 volt phantom power")))
             .child(
                 Toggle::new(
                     ElementId::NamedInteger("desk-audio-phantom".into(), key),
