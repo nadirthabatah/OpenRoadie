@@ -52,6 +52,7 @@ const POINTER_CARD_MIN_W: Rems = rems(20.75);
 /// the device name and status here.
 pub(super) fn detail_header(
     record: Option<&DeviceRecord>,
+    page_focus: &gpui::FocusHandle,
     cx: &mut Context<AppView>,
 ) -> impl IntoElement {
     let pal = theme::palette(cx);
@@ -71,12 +72,12 @@ pub(super) fn detail_header(
         .border_color(pal.border)
         .child(back_button(cx))
         .child(
-            div()
+            crate::ui::a11y::heading("device-title", name, 1)
+                .track_focus(page_focus)
                 .min_w_0()
                 .max_w(px(220.))
                 .truncate()
-                .text_heading()
-                .child(gpui::text!(name)),
+                .text_heading(),
         )
         .child(div().flex_1())
         .children(battery)

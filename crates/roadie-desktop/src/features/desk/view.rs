@@ -106,6 +106,10 @@ pub struct DeskPanel {
     /// Kept per device so a refusal stays next to the thing that refused,
     /// rather than in one banner that cannot say which row it belongs to.
     failures: BTreeMap<String, String>,
+    /// Tracked by the window's heading and focused when it opens. Nothing
+    /// else here takes focus on its own, and with nothing focused a screen
+    /// reader announced the window and Tab went nowhere.
+    title_focus: gpui::FocusHandle,
 }
 
 /// What a write is about, so a newer one can replace it.
@@ -125,7 +129,9 @@ enum WriteKey {
 }
 
 impl DeskPanel {
-    pub fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let title_focus = cx.focus_handle();
+        title_focus.focus(window, cx);
         let mut panel = Self {
             appearance: None,
             model: DeskModel::default(),
@@ -136,6 +142,7 @@ impl DeskPanel {
             writes: BTreeMap::new(),
             pending_phantom: BTreeMap::new(),
             failures: BTreeMap::new(),
+            title_focus,
         };
         panel.refresh(cx);
         panel
@@ -458,7 +465,13 @@ impl Render for DeskPanel {
                     .justify_between()
                     .items_center()
                     .p_4()
-                    .child(a11y::heading("desk-title", tr!("The desk"), 1).text_body())
+                    .child(
+                        gpui::InteractiveElement::track_focus(
+                            a11y::heading("desk-title", tr!("The desk"), 1),
+                            &self.title_focus,
+                        )
+                        .text_body(),
+                    )
                     .child(
                         control_button("desk-refresh")
                             .label(tr!("Refresh"))

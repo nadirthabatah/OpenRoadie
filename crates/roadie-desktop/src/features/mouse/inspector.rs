@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use gpui::{
     Context, Entity, InteractiveElement, IntoElement, ParentElement, Role,
-    StatefulInteractiveElement as _, Styled, div, prelude::FluentBuilder as _, px, rgb, svg,
+    StatefulInteractiveElement as _, Styled, div, prelude::FluentBuilder as _, px, svg,
 };
 use gpui_base::Button as BaseButton;
 use gpui_component::{
@@ -24,7 +24,7 @@ use super::view::MouseModelView;
 use crate::state::AppState;
 use crate::ui::action::localized_action_label;
 use crate::ui::components::{MenuRow, control_button, control_input};
-use crate::ui::theme::{self, ACCENT_BLUE, Palette, Typography as _};
+use crate::ui::theme::{self, Palette, Typography as _};
 
 pub(super) const INSPECTOR_W: f32 = 328.;
 
@@ -44,12 +44,15 @@ struct ActionPickerContext<'a> {
     open: bool,
     search: &'a Entity<InputState>,
     view: &'a Entity<MouseModelView>,
+    /// Tracked by the current-action card; see `MouseModelView::inspector_focus`.
+    focus: &'a gpui::FocusHandle,
 }
 
 pub(super) fn binding_inspector(
     data: BindingInspectorData<'_>,
     action_search: &Entity<InputState>,
     view: &Entity<MouseModelView>,
+    focus: &gpui::FocusHandle,
     cx: &Context<MouseModelView>,
 ) -> gpui::Div {
     let pal = theme::palette(cx);
@@ -57,6 +60,7 @@ pub(super) fn binding_inspector(
         open: data.action_picker_open,
         search: action_search,
         view,
+        focus,
     };
     let body = match data.selected {
         None => empty_inspector(
@@ -392,7 +396,7 @@ fn gesture_directions(
                             row.child(
                                 Icon::new(IconName::Check)
                                     .size_3()
-                                    .text_color(rgb(ACCENT_BLUE)),
+                                    .text_color(theme::accent()),
                             )
                         })
                         .on_click(move |_, _, cx| {
@@ -473,7 +477,7 @@ fn thumbwheel_inspector(
                                     row.child(
                                         Icon::new(IconName::Check)
                                             .size_3()
-                                            .text_color(rgb(ACCENT_BLUE)),
+                                            .text_color(theme::accent()),
                                     )
                                 })
                                 .on_click(move |_, _, cx| {
@@ -563,8 +567,11 @@ fn selection_card(
     let toggle = picker.view.clone();
     let search = picker.search.clone();
     let opening = !picker.open;
-    let accessible_label = value.clone();
+    // "Current action, Middle Click": the caption names what the value is,
+    // so it is said once, here, and drawn without being said again.
+    let accessible_label = format!("{caption}, {value}");
     BaseButton::new(id)
+        .track_focus(picker.focus)
         .accessibility_label(accessible_label)
         .aria_expanded(picker.open)
         .flex()
@@ -577,12 +584,12 @@ fn selection_card(
         .p_3()
         .cursor_pointer()
         .hover(move |card| card.bg(pal.control_hover))
-        .focus_visible(move |card| card.bg(pal.control_hover).border_color(rgb(ACCENT_BLUE)))
+        .focus_visible(move |card| card.bg(pal.control_hover).border_color(theme::accent()))
         .child(
             div()
                 .text_caption()
                 .text_color(pal.text_muted)
-                .child(gpui::text!(caption)),
+                .child(gpui::Text::new_inaccessible(caption)),
         )
         .child(
             h_flex()

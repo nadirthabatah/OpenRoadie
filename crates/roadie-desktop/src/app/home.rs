@@ -44,7 +44,10 @@ use crate::ui::theme::{self, ContentWidth, HEADER_H, Palette, Typography as _};
 
 /// Home (gallery) top bar: title/count, the persisted layout switcher, Settings,
 /// and Add Device.
-pub(super) fn home_header(cx: &mut Context<AppView>) -> impl IntoElement {
+pub(super) fn home_header(
+    page_focus: &gpui::FocusHandle,
+    cx: &mut Context<AppView>,
+) -> impl IntoElement {
     let pal = theme::palette(cx);
     let device_count = AppState::try_read(cx).map_or(0, |state| state.devices().len());
     let current_mode = AppState::try_read(cx).map_or(DeviceViewMode::Grid, |state| {
@@ -69,7 +72,11 @@ pub(super) fn home_header(cx: &mut Context<AppView>) -> impl IntoElement {
                 .flex_1()
                 .min_w_0()
                 .gap_0p5()
-                .child(crate::ui::a11y::heading("home-title", tr!("Devices"), 1).text_heading())
+                .child(
+                    crate::ui::a11y::heading("home-title", tr!("Devices"), 1)
+                        .track_focus(page_focus)
+                        .text_heading(),
+                )
                 .child(
                     div()
                         .text_caption()
@@ -273,7 +280,7 @@ fn transport_glance(record: &DeviceRecord, pal: Palette) -> impl IntoElement {
         )
     };
     let color: Hsla = match path {
-        "action-icons/bluetooth.svg" => rgb(theme::ACCENT_BLUE).into(),
+        "action-icons/bluetooth.svg" => theme::accent(),
         "action-icons/bolt.svg" | "action-icons/unifying.svg" => {
             rgb(theme::STATUS_CONNECTED).into()
         }

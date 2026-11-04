@@ -158,10 +158,32 @@ impl DetailTab {
     }
 }
 
+/// Where focus goes when the main window changes page: the new page's title,
+/// the device name or "Devices". The control that changed the page is gone
+/// and focus with it, which left a screen reader silent and Tab with nowhere
+/// to start.
+struct PageFocus {
+    /// Tracked by the title; not a Tab stop.
+    handle: FocusHandle,
+    /// Set by a route change, taken by the next render, which has the window
+    /// that focusing needs.
+    pending: bool,
+}
+
+impl PageFocus {
+    fn new(cx: &mut App) -> Self {
+        Self {
+            handle: cx.focus_handle().tab_stop(false),
+            pending: false,
+        }
+    }
+}
+
 /// Root application view.
 pub struct AppView {
     focus_handle: FocusHandle,
     route: Route,
+    page_focus: PageFocus,
     mouse_model: Entity<MouseModelView>,
     action_ring_panel: Entity<ActionRingPanel>,
     keyboard_model: Entity<FunctionRowView>,
@@ -292,6 +314,7 @@ impl AppView {
         Self {
             focus_handle,
             route: Route::Home,
+            page_focus: PageFocus::new(cx),
             mouse_model,
             action_ring_panel,
             keyboard_model,
@@ -340,6 +363,7 @@ impl AppView {
             .map(|state| state.read(cx))
             .and_then(AppState::current_record)
             .map_or(DetailTab::Device, DetailTab::default_for);
+        self.page_focus.pending = true;
         cx.notify();
     }
 
@@ -347,6 +371,7 @@ impl AppView {
     /// untouched — the route is purely presentational.
     fn go_home(&mut self, cx: &mut Context<Self>) {
         self.route = Route::Home;
+        self.page_focus.pending = true;
         cx.notify();
     }
 
@@ -581,11 +606,16 @@ impl Render for AppView {
                 .and_then(AppState::current_record)
                 .is_some_and(|record| record.record_key() == *record_key),
         };
-        if !show_device {
+        if !show_device && matches!(self.route, Route::Device { .. }) {
             self.route = Route::Home;
+            self.page_focus.pending = true;
         }
 
         window.set_window_title(&widgets::main_window_title(show_device, cx));
+        if std::mem::take(&mut self.page_focus.pending) {
+            self.page_focus.handle.focus(window, cx);
+        }
+        let page_focus = self.page_focus.handle.clone();
 
         let (header_el, content_el) = if show_device {
             // Resolve the active section once for both the navigation rail and
@@ -618,7 +648,7 @@ impl Render for AppView {
             self.camera_preview
                 .update(cx, |preview, cx| preview.set_target(camera_target, cx));
             (
-                detail::detail_header(record.as_ref(), cx).into_any_element(),
+                detail::detail_header(record.as_ref(), &page_focus, cx).into_any_element(),
                 detail::detail_content(
                     &detail::DetailPanels {
                         mouse_model: &self.mouse_model,
@@ -643,7 +673,7 @@ impl Render for AppView {
             self.camera_preview
                 .update(cx, |preview, cx| preview.set_target(None, cx));
             (
-                home::home_header(cx).into_any_element(),
+                home::home_header(&page_focus, cx).into_any_element(),
                 if has_device {
                     home::device_gallery(cx).into_any_element()
                 } else {

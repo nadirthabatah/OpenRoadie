@@ -66,6 +66,16 @@ pub fn spoken_name(id: impl Into<ElementId>, name: impl Into<SharedString>) -> i
         .child(Text::new(id.into(), name.into()))
 }
 
+/// "Interface language, English": a setting's name with its current choice,
+/// for a control that cannot say its own value. Just the name when nothing is
+/// chosen.
+pub fn choice(name: SharedString, chosen: Option<SharedString>) -> SharedString {
+    match chosen {
+        Some(chosen) => format!("{name}, {chosen}").into(),
+        None => name,
+    }
+}
+
 /// A named set of controls.
 ///
 /// The fix for buttons that look the same on two devices: a screen reader
@@ -271,7 +281,12 @@ impl RenderOnce for LevelSlider {
         let fraction = state.fraction();
         let track = state.track.clone();
         let focus = window
-            .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
+            .use_keyed_state(self.id.clone(), cx, |_, cx| {
+                // A handle is not a Tab stop unless it says so; without this
+                // every slider could be focused by a screen reader and never
+                // reached with Tab.
+                cx.focus_handle().tab_stop(true)
+            })
             .read(cx)
             .clone();
         let focused = focus.is_focused(window);
@@ -479,7 +494,12 @@ impl RenderOnce for StateSlider {
             0.0
         };
         let focus = window
-            .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
+            .use_keyed_state(self.id.clone(), cx, |_, cx| {
+                // A handle is not a Tab stop unless it says so; without this
+                // every slider could be focused by a screen reader and never
+                // reached with Tab.
+                cx.focus_handle().tab_stop(true)
+            })
             .read(cx)
             .clone();
         let track = window
