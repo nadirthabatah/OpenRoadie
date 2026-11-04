@@ -1206,10 +1206,25 @@ log as `SPEECH OUTPUT`. That found what tree audits could not:
   in `ui/a11y.rs` was focusable and never reached by Tab.
 - **Remapping a button** now moves focus from the button to its current
   action, and back there when the action list closes.
+- **The main window rendered no dialog layer**, so Rename, Delete and both
+  profile confirmations opened nothing for anyone. The library draws dialogs
+  only where an app adds `Root::render_dialog_layer`. Their titles and
+  descriptions are now headings and labels; the rename dialog draws its own
+  Save and Cancel, since `button_props` alone draws none there.
+- **The device menu opened on a mouse press only.** `ui::components::MenuButton`
+  opens the same library menu from Enter, Space and an assistive press, and
+  returns focus to the button when it closes.
+- **A duplicate accessibility id panics a debug build** (release drops the
+  node). `gpui::text!` takes its id from the call site, so the same helper
+  drawn twice under one parent collides; the light panel's two slider cards
+  did. Give such text an explicit id, or leave a caption that repeats a
+  control's name unexposed.
 - **Still open, in gpui-component:** its text input names a frame node but
   focuses an inner element with no node, so Tab into any search or text
-  field announces the window around it. Its `Select` exposes no name and no
-  value; each sits in a group named for its setting and current choice.
+  field announces the window around it, and inside its dialog Tab does not
+  leave the field (Enter saves, Escape cancels). Its `Select` exposes no
+  name and no value; each sits in a group named for its setting and current
+  choice. A drafted upstream issue covering these waits for Nadir's go-ahead.
 
 The T3 Code app on this PC brings no Linux of its own: its `wsl-runtime` is
 its server, installed into WSL. WSL with WSLg is the Linux to test in.
