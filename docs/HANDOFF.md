@@ -1121,6 +1121,24 @@ keyboard (wpid `4023`, firmware RQK49) and a mouse (wpid `4091`, RQM70).
   the family's full feature range for every Logitech device and monitor.
 - **The TourBox had no udev rule** for its serial node; it has one now,
   scoped to `c251:2005`.
+- **The whole desk on Linux, 2026-11-04.** Moved over by a USB switch:
+  both Stream Decks (brightness, a key painted), the Cybrix 16 (VIA 12,
+  keymap read), the TourBox (found at `/dev/ttyACM0`), the Key Light Neo
+  (on, off), and the MX Mechanical and MX Master 3S over Bolt (battery,
+  DPI 1000 to 1050 and back, SmartShift round trip, backlight read).
+- **The Vocaster works on Linux through the USB path.** Section 6.8 expected
+  `snd-usb-audio` to own the vendor interface; on kernel 7.0 interface 3 had
+  no driver at all, so it claimed cleanly and input 2's gain went 9, 10, 9
+  with read-back while the audio interfaces stayed with `snd-usb-audio`. The
+  ALSA route may still be the better one; it is no longer the only one.
+- **NVIDIA's driver links no connector to its DDC bus.** It creates an I²C
+  adapter per output (`NVIDIA i2c adapter N`) and publishes no `ddc` link,
+  so every monitor was named and none reachable. The backend now falls back
+  to reading the EDID off each adapter whose parent is the connector's own
+  graphics card, never an SMBus, and keeps the one matching the kernel's
+  block. The HG560T34 over HDMI to an RTX 3060: found on `/dev/i2c-8`,
+  brightness 90 and back, capabilities read. Without the `i2c` group it now
+  says that, rather than that no line exists.
 - **`uaccess` grants nothing over SSH**, which is the normal way into a
   headless box. Device checks there ran under `sudo`; `doctor` says so.
 - Native on Ubuntu: fmt, the CI Linux test set, non-GUI clippy and the
