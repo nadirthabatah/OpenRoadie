@@ -249,9 +249,8 @@ and the only ones that should:
 
 `cocoa` / `objc` 0.x are gone from every crate's direct deps (they remain in
 `Cargo.lock` only transitively via gpui — expected). Use `cargo add` for objc2
-framework crates, then **verify the `zed` / `gpui-component` git pins in
-`Cargo.lock` didn't move** (the gpui pin is held only by the lock; a resolve can
-bump it — restore with `cargo update -p gpui --precise <commit>`).
+framework crates; `gpui` is an exactly pinned registry crate, so a resolve cannot
+move it.
 
 Every ObjC / Core-framework crate is declared **once** in the workspace table —
 `objc2`, `objc2-app-kit`, `objc2-foundation`, `objc2-core-foundation`,

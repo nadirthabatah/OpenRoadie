@@ -690,10 +690,6 @@ impl Render for AppView {
         root.child(header_el)
             .child(content_el)
             .when(!granted, |this| this.child(status::attention_footer(cx)))
-            // The library draws its dialogs only where an app asks it to: without
-            // this layer, Rename, Delete and the profile confirmations opened
-            // nothing at all.
-            .children(gpui_component::Root::render_dialog_layer(window, cx))
             .into_any_element()
     }
 }

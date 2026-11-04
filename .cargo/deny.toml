@@ -70,7 +70,7 @@ unknown-git = "deny"
 # that appears as `git+…` in Cargo.lock must be listed here.
 allow-git = [
     "https://github.com/zed-industries/zed",
-    "https://github.com/longbridge/gpui-component",
+    "https://github.com/longbridge/gpui-kit",
     "https://github.com/AprilNEA/gpui-updater",
     "https://github.com/zed-industries/font-kit",
     "https://github.com/zed-industries/reqwest.git",

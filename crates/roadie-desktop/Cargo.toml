@@ -45,7 +45,7 @@ rust-i18n = "4"
 # The raw, un-negotiated system locale for the diagnostics report; locale
 # *negotiation* lives in roadie-ui.
 sys-locale = "0.3.2"
-gpui-updater = { git = "https://github.com/AprilNEA/gpui-updater", tag = "v0.0.7", features = ["gpui"] }
+gpui-updater = { package = "gpui-updater-pre", version = "0.4.4" }
 # Spawns the agent under its own macOS TCC identity (see ipc_client::spawn_agent).
 disclaim = "0.1"
 url = "2.5.8"

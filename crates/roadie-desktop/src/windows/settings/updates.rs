@@ -72,7 +72,6 @@ fn update_hero(updater: &Entity<Updater>, cx: &mut App) -> gpui::Div {
     };
 
     let message = match &status {
-        UpdateStatus::Idle | UpdateStatus::UpToDate => None,
         UpdateStatus::Checking => Some(tr!("Checking for updates…")),
         UpdateStatus::Available(v) => Some(tr!("Version %{version} is available.", version => v)),
         UpdateStatus::Downloading { downloaded, total } => Some(match total {
@@ -84,6 +83,9 @@ fn update_hero(updater: &Entity<Updater>, cx: &mut App) -> gpui::Div {
         UpdateStatus::Installing => Some(tr!("Installing…")),
         UpdateStatus::Staged(v) => Some(tr!("Version %{version} is ready.", version => v)),
         UpdateStatus::Errored(e) => Some(tr!("Update failed: %{error}", error => e.clone())),
+        // Idle and up to date say nothing, and so does a state this page does
+        // not know yet: the status enum is non-exhaustive.
+        _ => None,
     };
 
     let busy = matches!(
@@ -104,7 +106,7 @@ fn update_hero(updater: &Entity<Updater>, cx: &mut App) -> gpui::Div {
                 .outline()
                 .label(tr!("Restart to Update"))
                 .on_click(move |_, _, cx| {
-                    u.update(cx, |u, cx| u.restart(cx));
+                    u.update(cx, Updater::restart);
                 }),
             _ => Button::new("update-check")
                 .outline()
