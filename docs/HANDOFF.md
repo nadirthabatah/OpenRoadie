@@ -1223,8 +1223,9 @@ log as `SPEECH OUTPUT`. That found what tree audits could not:
   name field in the builder, so focus moved by Tab came straight back; the
   field is now focused once, when it opens.
 - **High contrast was checked on screen** with screenshots: forced on
-  Linux and Windows, and turned on from a `HighContrast` GTK theme on
-  Linux. Black or white pages, as designed.
+  Linux and Windows, turned on from a `HighContrast` GTK theme on Linux,
+  and followed when Windows' own high contrast was switched on (and back
+  off). Black or white pages, as designed.
 - **A Linux kernel without the hidraw class** (WSL, containers) made every
   device list fail with "No such file or directory"; `roadie-hid` now
   lists no devices there. The CLI's own tests caught it, run in WSL.
