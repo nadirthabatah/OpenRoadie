@@ -1244,8 +1244,10 @@ the desk, the mouse tabs, Settings and Add Device. Real NVDA (portable
 2026.3, silent synth, `--debug-logging`, keys sent from a script) then
 read the update dialog, the home window, a keyboard's lighting page
 (colours by name, the checked one said) and every Settings tab, switch
-and slider as intended. Not yet tried with a person on NVDA or Narrator,
-nor watched with Magnifier following focus.
+and slider as intended. Windows Magnifier (full screen, 5x) was read back
+through `MagGetFullscreenTransform` after every Tab: its view followed
+focus onto each control, home to lighting swatches. Not yet tried by a
+person on NVDA or Narrator.
 
 - **NVDA started after the window has focus hears nothing.** GPUI's
   Windows backend shows and activates the window before it builds the
@@ -1253,11 +1255,12 @@ nor watched with Magnifier following focus.
   `GetForegroundWindow()` — measured 30 ms before the window actually came
   to the front. The adapter then believes the window is unfocused and no
   focus events are raised until the window is switched away from and back.
-  NVDA already running when the app opens, and windows opened later
-  (Settings), are fine. Upstream is `gpui_windows`
-  (zed-industries/zed); a drafted issue waits for Nadir's go-ahead. A
-  script testing with NVDA has to switch away and back first, or it will
-  report silence that a person would not get from a normal launch.
+  Fixed here by opening every window hidden on Windows
+  (`windows::SHOW_ON_OPEN`) and letting the `activate_window` that follows
+  show it, so the activation lands after the adapter exists. The root
+  cause is upstream in `gpui_windows` (zed-industries/zed); a drafted
+  issue waits for Nadir's go-ahead, and `SHOW_ON_OPEN` can go once it is
+  fixed there.
 - **Two OpenRoadie windows confuse a scripted NVDA run:** pick the window
   by process and confirm it is the foreground window before sending keys.
 
