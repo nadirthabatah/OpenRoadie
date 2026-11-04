@@ -90,6 +90,9 @@ fn main() -> Result<()> {
         }
     };
 
+    // Once, and before any window exists.
+    platform::os::forward_window_focus();
+
     // Resolve the UI locale before any menu or window is built so the first
     // frame already renders in the right language.
     i18n::apply(&initial_config.app_settings);

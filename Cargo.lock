@@ -6687,6 +6687,7 @@ dependencies = [
 name = "roadie-desktop"
 version = "0.8.1"
 dependencies = [
+ "accesskit_macos",
  "anyhow",
  "appcatalog",
  "appicon",

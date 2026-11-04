@@ -68,6 +68,32 @@ pub fn set_app_appearance(appearance: Appearance) {
 #[cfg(not(target_os = "macos"))]
 pub fn set_app_appearance(_appearance: Appearance) {}
 
+/// Let assistive technology ask a window what has focus.
+///
+/// AccessKit answers `accessibilityFocusedUIElement` on a window's content
+/// view, but GPUI's window classes never forward the question there, so
+/// asking a window got the window itself back and VoiceOver could only say
+/// "OpenRoadie, window" until the next focus change was announced. AccessKit
+/// ships this forwarder for exactly that, and GPUI does not install it.
+/// Call once, before any window opens; a second call panics.
+#[cfg(target_os = "macos")]
+#[expect(
+    unsafe_code,
+    reason = "installing AccessKit's focus forwarder on GPUI's NSWindow subclasses"
+)]
+pub fn forward_window_focus() {
+    for class in ["GPUIWindow", "GPUIPanel"] {
+        // SAFETY: both are NSWindow subclasses GPUI registers in a load-time
+        // constructor, so they exist before `main`, and neither defines the
+        // method itself. AccessKit is statically linked into this binary, so
+        // the code the method points at is never unloaded.
+        unsafe { accesskit_macos::add_focus_forwarder_to_window_class(class) };
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn forward_window_focus() {}
+
 /// Whether the operating system asks apps to draw in high contrast: Windows'
 /// contrast themes, or the GNOME high-contrast switch (and a `HighContrast`
 /// GTK theme, which other desktops set instead). Read whenever the theme is
