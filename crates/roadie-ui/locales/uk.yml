@@ -369,6 +369,8 @@ _version: 1
 "Roundness of buttons, cards, and controls.": "Заокругленість кнопок, карток і елементів керування."
 "High contrast": "High contrast"
 "Black and white with bold borders. Follow system turns it on with the OS setting.": "Black and white with bold borders. Follow system turns it on with the OS setting."
+"Search settings": "Search settings"
+"No settings match": "No settings match"
 "Interface scale": "Interface scale"
 "Scale text and interface spacing.": "Scale text and interface spacing."
 "Sharp": "Гострі"

@@ -109,7 +109,9 @@ pub(super) fn appearance_page(
     let language_group = SettingGroup::new().title(tr!("Language")).item(
         SettingItem::new(
             tr!("Interface language"),
-            SettingField::render(move |_, _, _| language_select_field(language_select.clone())),
+            SettingField::render(move |_, _, cx| {
+                language_select_field(language_select.clone(), cx)
+            }),
         )
         .description(tr!("Choose the interface language.")),
     );

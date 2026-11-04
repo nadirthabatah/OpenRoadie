@@ -67,8 +67,8 @@ pub(super) fn assets_page(
         .item(
             SettingItem::new(
                 tr!("Asset source"),
-                SettingField::render(move |_, _, _| {
-                    asset_source_select_field(asset_source_select.clone())
+                SettingField::render(move |_, _, cx| {
+                    asset_source_select_field(asset_source_select.clone(), cx)
                 }),
             )
             .description(tr!(
@@ -156,18 +156,26 @@ pub(super) fn assets_page(
 )]
 fn asset_source_select_field(
     asset_source_select: Entity<SelectState<Vec<AssetSourceOption>>>,
-) -> impl IntoElement {
-    // The library select takes no name of its own; a named group gives a
-    // screen reader the setting it belongs to as focus enters it.
-    crate::ui::a11y::group("asset-source", tr!("Asset source"))
-        .flex_shrink_0()
-        .w(px(220.))
-        .h_6()
-        .child(
-            control_select(&asset_source_select)
-                .w(px(220.))
-                .menu_width(px(220.)),
-        )
+    cx: &gpui::App,
+) -> impl IntoElement + use<> {
+    let chosen = asset_source_select
+        .read(cx)
+        .selected_index(cx)
+        .and_then(|ix| asset_source_options().get(ix.row).map(SelectItem::title));
+    // The library select exposes neither a name nor its value; see
+    // `language_select_field`.
+    crate::ui::a11y::group(
+        "asset-source",
+        crate::ui::a11y::choice(tr!("Asset source"), chosen),
+    )
+    .flex_shrink_0()
+    .w(px(220.))
+    .h_6()
+    .child(
+        control_select(&asset_source_select)
+            .w(px(220.))
+            .menu_width(px(220.)),
+    )
 }
 
 /// Re-walk the cache and swap the size blurb into the view after `delay`. The

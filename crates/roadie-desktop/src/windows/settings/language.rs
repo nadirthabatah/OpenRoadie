@@ -69,18 +69,27 @@ pub(super) fn selected_language_index(
 )]
 pub(super) fn language_select_field(
     language_select: Entity<SelectState<Vec<LanguageOption>>>,
-) -> impl IntoElement {
+    cx: &gpui::App,
+) -> impl IntoElement + use<> {
+    let chosen = language_select
+        .read(cx)
+        .selected_index(cx)
+        .and_then(|ix| language_options().get(ix.row).map(SelectItem::title));
     // The Select's root is `size_full`, so pin it to a fixed-size box instead
     // of letting it consume the whole Settings item row.
-    // The library select takes no name of its own; a named group gives a
-    // screen reader the setting it belongs to as focus enters it.
-    crate::ui::a11y::group("interface-language", tr!("Interface language"))
-        .flex_shrink_0()
-        .w(px(220.))
-        .h_6()
-        .child(
-            control_select(&language_select)
-                .w(px(220.))
-                .menu_width(px(220.)),
-        )
+    // The library select exposes neither a name nor its value; a group named
+    // for both gives a screen reader "Interface language, English" as focus
+    // enters it.
+    crate::ui::a11y::group(
+        "interface-language",
+        crate::ui::a11y::choice(tr!("Interface language"), chosen),
+    )
+    .flex_shrink_0()
+    .w(px(220.))
+    .h_6()
+    .child(
+        control_select(&language_select)
+            .w(px(220.))
+            .menu_width(px(220.)),
+    )
 }
