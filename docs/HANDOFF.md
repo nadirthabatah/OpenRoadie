@@ -277,14 +277,9 @@ no `dlsym`'d signature checked against the one Apple ships — a wrong one
 type-checks perfectly and is undefined behaviour when called. The full note is
 in `.claude/rules/cross-platform.md`.
 
-**A new dependency can move the `gpui` git pin, and a plain `cargo check` is
-enough to do it.** The manifest entry has no rev, so a re-resolve follows the
-branch's HEAD. It does not look like a dependency problem: it is a compile
-error deep inside `gpui_linux` about `ImageFormat::iter`, with a note about two
-versions of `strum`. `git checkout Cargo.lock` does not fix it, because the
-next `cargo check` moves it again. Let the lock pick up the genuinely new
-packages, then `cargo update -p gpui --precise cc053a4a...`, then check that
-`git diff Cargo.lock` shows only the new crates.
+**GPUI is the exactly pinned `gpui-pre` crate.** Bump it, gpui-component's rev
+and the `-pre` flavours of swr and the updater together; a GPUI-based crate
+that pulls in plain `gpui` shows up as a type mismatch between two `App`s.
 
 **Read the three surfaces side by side; the odd one out is usually a bug.**
 Every device family is reachable three ways — the command line, the MCP
@@ -1219,12 +1214,21 @@ log as `SPEECH OUTPUT`. That found what tree audits could not:
   drawn twice under one parent collides; the light panel's two slider cards
   did. Give such text an explicit id, or leave a caption that repeats a
   control's name unexposed.
-- **Still open, in gpui-component:** its text input names a frame node but
-  focuses an inner element with no node, so Tab into any search or text
-  field announces the window around it, and inside its dialog Tab does not
-  leave the field (Enter saves, Escape cancels). Its `Select` exposes no
-  name and no value; each sits in a group named for its setting and current
-  choice. A drafted upstream issue covering these waits for Nadir's go-ahead.
+- **gpui-component moved to the rev that fixed its input** (`4abf41ca`,
+  "input: align accessibility semantics with editor focus", in what is now
+  `longbridge/gpui-kit`). Its text fields used to focus an inner element
+  with no node, so Orca announced the window; they now read "Search
+  settings entry". Its `Select` takes `accessibility_label` and says its
+  value, so the group workaround is gone, and its `Root` draws dialogs
+  itself. The move took GPUI from the zed git branch to the exactly pinned
+  `gpui-pre` crate, and with it `swr-gpui-pre` and `gpui-updater-pre` 0.4.4.
+  The updater's status became non-exhaustive.
+- **Rebuilding a page left focus on nothing** with the new library, so
+  Settings owns a focus handle per page tab and gives the chosen tab focus
+  back on the next frame.
+- **Still open:** inside the library dialog, Tab does not leave a text
+  field (Enter saves, Escape cancels). An upstream issue is drafted and not
+  posted.
 
 The T3 Code app on this PC brings no Linux of its own: its `wsl-runtime` is
 its server, installed into WSL. WSL with WSLg is the Linux to test in.
