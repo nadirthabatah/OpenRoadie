@@ -414,11 +414,11 @@ fn camera_automation(current: LightSettings, pal: Palette) -> impl IntoElement {
 fn light_status(view: LightView, pal: Palette) -> impl IntoElement {
     let LightView { online, enabled } = view;
     let (label, color) = if !online {
-        (tr!("Offline"), theme::STATUS_OFFLINE)
+        (tr!("Offline"), theme::status_offline())
     } else if enabled {
-        (tr!("On"), theme::STATUS_CONNECTED)
+        (tr!("On"), theme::status_connected())
     } else {
-        (tr!("Off"), theme::STATUS_OFFLINE)
+        (tr!("Off"), theme::status_offline())
     };
     h_flex()
         .gap_1p5()
@@ -500,11 +500,11 @@ fn light_command_status(status: LightCommandStatus, pal: Palette) -> impl IntoEl
         LightCommandStatus::Pending => (tr!("Applying light setting…").to_string(), pal.text_muted),
         LightCommandStatus::Failed(error) => (
             format!("{}: {error}", tr!("Unavailable")),
-            Hsla::from(rgb(theme::STATUS_OFFLINE)),
+            Hsla::from(rgb(theme::status_offline())),
         ),
         LightCommandStatus::Offline => (
             tr!("Offline").to_string(),
-            Hsla::from(rgb(theme::STATUS_OFFLINE)),
+            Hsla::from(rgb(theme::status_offline())),
         ),
     };
     h_flex()

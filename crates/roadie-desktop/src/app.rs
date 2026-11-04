@@ -413,7 +413,7 @@ impl AppView {
             .child(
                 Icon::new(IconName::TriangleAlert)
                     .size_8()
-                    .text_color(rgb(theme::STATUS_CONNECTING)),
+                    .text_color(rgb(theme::status_connecting())),
             )
             .child(
                 div()

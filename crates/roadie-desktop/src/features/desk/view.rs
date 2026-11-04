@@ -525,7 +525,7 @@ impl AuxWindow for DeskPanel {
 /// carrier here: every warning it paints is a sentence that says the same
 /// thing, which is what a screen reader gets.
 fn warning_colour() -> gpui::Rgba {
-    gpui::rgb(theme::STATUS_DISABLED)
+    gpui::rgb(theme::status_disabled())
 }
 
 /// The window's native title — one definition for opening and for the

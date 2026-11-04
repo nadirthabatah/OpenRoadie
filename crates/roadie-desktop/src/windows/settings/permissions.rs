@@ -180,9 +180,9 @@ fn permission_item(
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn status_badge(status: PermissionStatus, pal: Palette) -> gpui::Div {
     let (label, color) = match status {
-        PermissionStatus::Granted => (tr!("Granted"), theme::STATUS_CONNECTED),
-        PermissionStatus::Denied => (tr!("Not granted"), theme::STATUS_CONNECTING),
-        PermissionStatus::Unknown => (tr!("Unknown"), theme::STATUS_OFFLINE),
+        PermissionStatus::Granted => (tr!("Granted"), theme::status_connected()),
+        PermissionStatus::Denied => (tr!("Not granted"), theme::status_connecting()),
+        PermissionStatus::Unknown => (tr!("Unknown"), theme::status_offline()),
     };
     badge(label, color, pal)
 }
@@ -212,7 +212,7 @@ fn permission_field(
     let never_requested = matches!(status, PermissionStatus::Unknown)
         && matches!(permission, Permission::Bluetooth | Permission::Camera);
     let status_el = if never_requested {
-        badge(tr!("Not requested"), theme::STATUS_OFFLINE, pal)
+        badge(tr!("Not requested"), theme::status_offline(), pal)
     } else {
         status_badge(status, pal)
     };

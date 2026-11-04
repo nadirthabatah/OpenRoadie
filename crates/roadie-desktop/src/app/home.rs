@@ -180,7 +180,7 @@ fn device_card(
         .p_4()
         .rounded(pal.card_radius)
         .border_1()
-        .border_color(device_ring(enabled))
+        .border_color(device_ring(enabled, pal))
         .bg(pal.panel)
         .shadow_xs()
         .child(
@@ -282,7 +282,7 @@ fn transport_glance(record: &DeviceRecord, pal: Palette) -> impl IntoElement {
     let color: Hsla = match path {
         "action-icons/bluetooth.svg" => theme::accent(),
         "action-icons/bolt.svg" | "action-icons/unifying.svg" => {
-            rgb(theme::STATUS_CONNECTED).into()
+            rgb(theme::status_connected()).into()
         }
         _ => pal.text_muted,
     };
@@ -317,11 +317,17 @@ fn battery_glance(
         .tooltip(move |window, cx| Tooltip::new(hint.clone()).build(window, cx))
 }
 
-fn device_ring(enabled: bool) -> Hsla {
+fn device_ring(enabled: bool, pal: Palette) -> Hsla {
     if enabled {
-        gpui::transparent_black()
+        // High contrast draws every card's edge: on its page the card's fill
+        // is the page's own, and only a faint shadow was left to show it.
+        if theme::is_high_contrast() {
+            pal.border
+        } else {
+            gpui::transparent_black()
+        }
     } else {
-        rgb(theme::STATUS_DISABLED).into()
+        rgb(theme::status_disabled()).into()
     }
 }
 

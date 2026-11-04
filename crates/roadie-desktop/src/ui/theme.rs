@@ -40,13 +40,58 @@ pub fn accent() -> Hsla {
     gpui::rgb(ACCENT.load(std::sync::atomic::Ordering::Relaxed)).into()
 }
 
-/// Status colours for the connectivity readouts. Fixed like the accent, but the
-/// overlay draws no status, so they stay with the app that does.
+/// Status colours for the connectivity readouts, as drawn outside high
+/// contrast. The overlay draws no status, so they stay with the app that does.
+/// Read them through [`status_connected`] and its siblings, which swap in
+/// colours that keep 3:1 against a high-contrast page.
 pub const STATUS_CONNECTED: u32 = 0x0022_c55e;
 pub const STATUS_CONNECTING: u32 = 0x00ea_b308;
 pub const STATUS_OFFLINE: u32 = 0x006b_7280;
 /// Ring color for a device the user disabled ("Manage this device" off).
 pub const STATUS_DISABLED: u32 = 0x00ef_4444;
+
+/// Which contrast the theme was last applied in: 0 normal, 1 high contrast
+/// on black, 2 high contrast on white. Set only by [`apply_from_settings`].
+static CONTRAST_MODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// Pick a status colour for the contrast the theme is in.
+fn status(normal: u32, on_black: u32, on_white: u32) -> u32 {
+    match CONTRAST_MODE.load(std::sync::atomic::Ordering::Relaxed) {
+        1 => on_black,
+        2 => on_white,
+        _ => normal,
+    }
+}
+
+/// Whether the high-contrast theme is the one on show.
+#[must_use]
+pub fn is_high_contrast() -> bool {
+    CONTRAST_MODE.load(std::sync::atomic::Ordering::Relaxed) != 0
+}
+
+/// Connected, charged, granted.
+#[must_use]
+pub fn status_connected() -> u32 {
+    status(STATUS_CONNECTED, 0x0000_ff00, 0x0000_6400)
+}
+
+/// Connecting, low, needs attention.
+#[must_use]
+pub fn status_connecting() -> u32 {
+    status(STATUS_CONNECTING, 0x00ff_ff00, 0x0080_5000)
+}
+
+/// Offline or unknown.
+#[must_use]
+pub fn status_offline() -> u32 {
+    status(STATUS_OFFLINE, 0x00c0_c0c0, 0x0040_4040)
+}
+
+/// Disabled, critical, failed.
+#[must_use]
+pub fn status_disabled() -> u32 {
+    status(STATUS_DISABLED, 0x00ff_6060, 0x00b0_0000)
+}
 
 /// Sizes that several components need to agree on.
 pub const HEADER_H: f32 = 64.;
@@ -393,6 +438,14 @@ pub fn apply_from_settings(window: Option<&mut Window>, cx: &mut App) {
         Appearance::Dark => ThemeMode::Dark,
     };
     Theme::change(mode, window, cx);
+    CONTRAST_MODE.store(
+        match (high_contrast, mode.is_dark()) {
+            (false, _) => 0,
+            (true, true) => 1,
+            (true, false) => 2,
+        },
+        std::sync::atomic::Ordering::Relaxed,
+    );
     ACCENT.store(
         match (high_contrast, mode.is_dark()) {
             (false, _) => ACCENT_BLUE,

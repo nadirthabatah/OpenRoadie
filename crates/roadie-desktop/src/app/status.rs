@@ -52,7 +52,7 @@ pub(super) fn notice_body(headline: SharedString, caption: SharedString, cx: &Ap
         .child(
             Icon::new(IconName::TriangleAlert)
                 .size_8()
-                .text_color(rgb(theme::STATUS_CONNECTING)),
+                .text_color(rgb(theme::status_connecting())),
         )
         .child(crate::ui::a11y::heading("notice-headline", headline, 1).text_title())
         .child(
@@ -166,7 +166,7 @@ fn accessibility_status(pal: Palette) -> impl IntoElement {
             div()
                 .size_1p5()
                 .rounded_full()
-                .bg(rgb(theme::STATUS_CONNECTING)),
+                .bg(rgb(theme::status_connecting())),
         )
         .child(div().child(gpui::text!(tr!(
             "Accessibility not granted · click to grant"

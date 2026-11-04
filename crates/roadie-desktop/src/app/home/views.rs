@@ -264,7 +264,7 @@ fn device_list_row(
         .py_2()
         .rounded(pal.card_radius)
         .border_1()
-        .border_color(device_ring(enabled))
+        .border_color(device_ring(enabled, pal))
         .bg(pal.panel)
         .shadow_xs()
         .child(
