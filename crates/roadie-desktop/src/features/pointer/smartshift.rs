@@ -21,7 +21,7 @@ use gpui_component::{
     Disableable as _, Selectable as _,
     button::Button,
     h_flex,
-    slider::{Slider, SliderEvent, SliderState},
+    slider::{SliderEvent, SliderState},
     v_flex,
 };
 use roadie_core::config::{
@@ -252,12 +252,23 @@ impl SmartShiftPanel {
                     ),
             )
             .when(sensitivity_enabled, |row| {
-                row.child(Slider::new(&self.threshold).horizontal())
+                let spoken = gpui::SharedString::from(format!("{display}"));
+                row.child(crate::ui::a11y::StateSlider::new(
+                    "smartshift-threshold-slider",
+                    &self.threshold,
+                    tr!("Sensitivity"),
+                    move |_| spoken.clone(),
+                ))
             })
             .when(!sensitivity_enabled, |row| row.child(disabled_track(pal)))
-            .child(div().text_caption().text_color(pal.text_muted).child(tr!(
-                "Higher keeps the ratchet engaged longer before free-spin."
-            )));
+            .child(
+                div()
+                    .text_caption()
+                    .text_color(pal.text_muted)
+                    .child(gpui::text!(tr!(
+                        "Higher keeps the ratchet engaged longer before free-spin."
+                    ))),
+            );
 
         let wheel_row = self.wheel_sensitivity_row(window, cx);
 
@@ -307,7 +318,15 @@ impl SmartShiftPanel {
                             .child(format!("{display}")),
                     ),
             )
-            .child(Slider::new(&self.wheel_sensitivity).horizontal())
+            .child({
+                let spoken = gpui::SharedString::from(format!("{display}"));
+                crate::ui::a11y::StateSlider::new(
+                    "thumbwheel-sensitivity-slider",
+                    &self.wheel_sensitivity,
+                    tr!("Thumb Wheel Sensitivity"),
+                    move |_| spoken.clone(),
+                )
+            })
     }
 }
 
@@ -407,11 +426,11 @@ fn permanent_row(
                     div()
                         .text_caption()
                         .text_color(pal.text_muted)
-                        .child(tr!("Never auto-switch to free-spin.")),
+                        .child(gpui::text!(tr!("Never auto-switch to free-spin."))),
                 ),
         )
         .child(
-            Toggle::new("smartshift-permanent")
+            Toggle::new("smartshift-permanent", tr!("Permanent ratchet"))
                 .selected(permanent)
                 .disabled(!ratchet)
                 .on_change(move |permanent, _window, cx| {
@@ -443,6 +462,7 @@ fn mode_pill(label: SharedString, selected: bool, status: SmartShiftStatus) -> i
         .compact()
         .label(label)
         .selected(selected)
+        .toggled(selected)
         .on_click(move |_event, _window, cx| {
             AppState::update_smartshift(cx, status);
         })

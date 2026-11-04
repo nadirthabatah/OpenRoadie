@@ -28,8 +28,8 @@
 //! confirmation stops being read.
 
 use gpui::{
-    App, Context, ElementId, IntoElement, ParentElement, Styled, Window, div,
-    prelude::FluentBuilder as _,
+    App, Context, ElementId, InteractiveElement as _, IntoElement, ParentElement,
+    StatefulInteractiveElement as _, Styled, Window, div, prelude::FluentBuilder as _,
 };
 use gpui_component::{Disableable as _, Selectable as _, h_flex, v_flex};
 use roadie_ipc::desk::{AudioFailure, AudioInputChange, AudioInputSettings, AudioInterfaceSummary};
@@ -38,6 +38,7 @@ use super::{DeskPanel, WriteKey, warning_colour};
 use crate::features::desk::model::describe_gain;
 use crate::services::ipc::{Command, DeskCommand};
 use crate::state::AppState;
+use crate::ui::a11y;
 use crate::ui::components::{Toggle, control_button};
 use crate::ui::theme::{Palette, Typography as _};
 
@@ -125,11 +126,12 @@ impl DeskPanel {
         pal: Palette,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
+        let card_key = format!("audio-{interface_index}");
         if !interface.reachable {
-            return Self::card(pal)
-                .child(div().text_body().child(interface.name.clone()))
+            return Self::card(&card_key, interface.name.clone(), pal)
+                .child(a11y::heading("name", interface.name.clone(), 3).text_body())
                 .when_some(interface.unreachable_reason.clone(), |card, why| {
-                    card.child(div().text_caption().text_color(pal.text_muted).child(why))
+                    card.child(Self::caption("unreachable", why, pal))
                 })
                 .into_any_element();
         }
@@ -148,16 +150,20 @@ impl DeskPanel {
             })
             .collect();
 
-        Self::card(pal)
+        Self::card(&card_key, interface.name.clone(), pal)
             .child(self.card_heading(&interface.id, &interface.name, pal))
             .when(interface.mass_storage == Some(true), |card| {
                 // Not a fault and not a thing to fix — everything works with it
                 // on. Said because people expect it to matter and then go
                 // looking for a switch that would not help.
-                card.child(div().text_caption().text_color(pal.text_muted).child(tr!(
-                    "This interface is still showing its registration disk, which is how it \
+                card.child(Self::caption(
+                    "mass-storage",
+                    tr!(
+                        "This interface is still showing its registration disk, which is how it \
                      leaves the factory. Everything here works anyway."
-                )))
+                    ),
+                    pal,
+                ))
             })
             .children(rows)
             .into_any_element()
@@ -182,25 +188,30 @@ impl DeskPanel {
             .contains_key(&WriteKey::AudioInput(id.to_owned(), input));
         let warning = self.pending_phantom.get(&(id.to_owned(), input)).cloned();
 
-        v_flex()
-            .gap_1()
-            .child(
-                div()
-                    .text_caption()
-                    .child(tr!("Input %{number}", number = input)),
-            )
-            .when_some(settings.gain, |block, gain| {
-                block.child(Self::gain_row(id, input, key, gain, busy, pal, cx))
-            })
-            .when_some(settings.muted, |block, muted| {
-                block.child(Self::mute_row(id, input, key, muted, cx))
-            })
-            .when_some(settings.phantom, |block, phantom| {
-                block.child(Self::phantom_row(id, input, key, phantom, cx))
-            })
-            .when_some(warning, |block, said| {
-                block.child(Self::phantom_warning(id, input, key, said, cx))
-            })
+        let title = tr!("Input %{number}", number = input);
+        // A group per input, so every control inside is announced as
+        // belonging to it: "Input 2, Gain, Turn up" rather than a third
+        // "Turn up" with nothing saying which input it raises.
+        a11y::group(
+            ElementId::NamedInteger("desk-audio-input".into(), key),
+            title.clone(),
+        )
+        .flex()
+        .flex_col()
+        .gap_1()
+        .child(a11y::heading("title", title, 4).text_caption())
+        .when_some(settings.gain, |block, gain| {
+            block.child(Self::gain_row(id, input, key, gain, busy, pal, cx))
+        })
+        .when_some(settings.muted, |block, muted| {
+            block.child(Self::mute_row(id, input, key, muted, cx))
+        })
+        .when_some(settings.phantom, |block, phantom| {
+            block.child(Self::phantom_row(id, input, key, phantom, cx))
+        })
+        .when_some(warning, |block, said| {
+            block.child(Self::phantom_warning(id, input, key, said, cx))
+        })
     }
 
     /// The gain reading and its two steps.
@@ -216,12 +227,14 @@ impl DeskPanel {
         v_flex()
             .gap_1()
             .child(Self::reading_row(
+                "gain",
                 tr!("Gain").to_string(),
                 describe_gain(Some(gain)),
                 pal,
             ))
             .child(
-                h_flex()
+                a11y::group("gain-steps", tr!("Gain"))
+                    .flex()
                     .gap_2()
                     .child(Self::gain_button(
                         id,
@@ -295,16 +308,20 @@ impl DeskPanel {
         let panel = cx.entity().downgrade();
         h_flex()
             .justify_between()
-            .child(div().text_caption().child(tr!("Mute")))
+            .child(div().text_caption().child(gpui::text!(tr!("Mute"))))
             .child(
-                Toggle::new(ElementId::NamedInteger("desk-audio-mute".into(), key))
-                    .label(if muted {
-                        tr!("Muted")
-                    } else {
-                        tr!("Not muted")
-                    })
-                    .selected(muted)
-                    .on_change(move |_checked: &bool, _window: &mut Window, cx: &mut App| {
+                Toggle::new(
+                    ElementId::NamedInteger("desk-audio-mute".into(), key),
+                    tr!("Mute"),
+                )
+                .label(if muted {
+                    tr!("Muted")
+                } else {
+                    tr!("Not muted")
+                })
+                .selected(muted)
+                .on_change(
+                    move |_checked: &bool, _window: &mut Window, cx: &mut App| {
                         Self::request(
                             &panel,
                             id.clone(),
@@ -315,7 +332,8 @@ impl DeskPanel {
                             },
                             cx,
                         );
-                    }),
+                    },
+                ),
             )
     }
 
@@ -335,12 +353,20 @@ impl DeskPanel {
         let panel = cx.entity().downgrade();
         h_flex()
             .justify_between()
-            .child(div().text_caption().child(tr!("48 volt phantom power")))
             .child(
-                Toggle::new(ElementId::NamedInteger("desk-audio-phantom".into(), key))
-                    .label(if phantom { tr!("On") } else { tr!("Off") })
-                    .selected(phantom)
-                    .on_change(move |_checked: &bool, _window: &mut Window, cx: &mut App| {
+                div()
+                    .text_caption()
+                    .child(gpui::text!(tr!("48 volt phantom power"))),
+            )
+            .child(
+                Toggle::new(
+                    ElementId::NamedInteger("desk-audio-phantom".into(), key),
+                    tr!("48 volt phantom power"),
+                )
+                .label(if phantom { tr!("On") } else { tr!("Off") })
+                .selected(phantom)
+                .on_change(
+                    move |_checked: &bool, _window: &mut Window, cx: &mut App| {
                         Self::request(
                             &panel,
                             id.clone(),
@@ -351,7 +377,8 @@ impl DeskPanel {
                             },
                             cx,
                         );
-                    }),
+                    },
+                ),
             )
     }
 
@@ -369,11 +396,17 @@ impl DeskPanel {
         let dismiss_panel = cx.entity().downgrade();
         v_flex()
             .gap_1()
+            // An alert, so a screen reader speaks it the moment it appears:
+            // this is the sentence somebody has to hear before 48 volts go
+            // onto a cable, and they cannot be expected to go looking for it.
             .child(
                 div()
+                    .id("phantom-warning")
+                    .role(gpui::accesskit::Role::Alert)
+                    .aria_label(said.clone())
                     .text_caption()
                     .text_color(warning_colour())
-                    .child(said),
+                    .child(gpui::Text::new_inaccessible(said.into())),
             )
             .child(
                 h_flex()

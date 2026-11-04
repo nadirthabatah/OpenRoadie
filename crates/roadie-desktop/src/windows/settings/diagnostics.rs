@@ -61,17 +61,19 @@ fn input_conflict_field(cx: &mut App) -> gpui::Div {
             div()
                 .text_caption()
                 .text_color(pal.text_muted)
-                .child(tr!("No other app is intercepting mouse input.")),
+                .child(gpui::text!(tr!(
+                    "No other app is intercepting mouse input."
+                ))),
         );
     } else {
         col = col.child(
             div()
                 .text_body()
                 .text_color(pal.text_primary)
-                .child(tr!(
+                .child(gpui::text!(tr!(
                     "Another app is intercepting mouse input, which can cause pointer lag or duplicated button actions: %{apps}",
                     apps => conflicts.join(", ")
-                )),
+                ))),
         );
     }
 

@@ -10,8 +10,7 @@ use gpui::{
 };
 use gpui_base::Button as BaseButton;
 use gpui_component::{
-    Icon, IconName, Selectable as _, button::Button, h_flex, input::InputState, tooltip::Tooltip,
-    v_flex,
+    Icon, IconName, Selectable as _, h_flex, input::InputState, tooltip::Tooltip, v_flex,
 };
 use roadie_core::binding::{
     ActionRingConfig, ActionRingEntry, ActionRingIcon, ActionRingLayout, ActionRingSlot,
@@ -68,6 +67,10 @@ impl Focusable for ActionRingPanel {
 }
 
 impl Render for ActionRingPanel {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the panel lays out its sections inline"
+    )]
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let pal = theme::palette(cx);
         let (ring, layout) = action_ring_editor_state(cx);
@@ -86,7 +89,9 @@ impl Render for ActionRingPanel {
         );
         let view = cx.entity();
 
-        v_flex()
+        crate::ui::a11y::group("actions-ring-panel", tr!("Actions Ring"))
+            .flex()
+            .flex_col()
             .w_full()
             .gap_4()
             .tab_group()
@@ -94,12 +99,18 @@ impl Render for ActionRingPanel {
             .child(
                 v_flex()
                     .gap_1()
-                    .child(div().text_subheading().child(tr!("Actions Ring")))
+                    .child(
+                        div()
+                            .text_subheading()
+                            .child(gpui::text!(tr!("Actions Ring"))),
+                    )
                     .child(
                         div()
                             .text_caption()
                             .text_color(pal.text_muted)
-                            .child(tr!("Configure the eight actions shown around the cursor.")),
+                            .child(gpui::text!(tr!(
+                                "Configure the eight actions shown around the cursor."
+                            ))),
                     ),
             )
             .child(
@@ -125,16 +136,19 @@ impl Render for ActionRingPanel {
                     .gap_3()
                     .child(
                         v_flex()
-                            .child(div().text_body().child(tr!("Actions Ring")))
+                            .child(div().text_body().child(gpui::text!(tr!("Actions Ring"))))
                             .child(
                                 div()
                                     .text_caption()
                                     .text_color(pal.text_muted)
-                                    .child(tr!("Open at the current cursor position.")),
+                                    .child(gpui::text!(tr!(
+                                        "Open at the current cursor position."
+                                    ))),
                             ),
                     )
                     .child(toggle_button(
                         "ring-enabled",
+                        tr!("Actions Ring"),
                         ring.enabled,
                         |state, enabled| {
                             state.commit_action_ring_enabled(enabled);
@@ -149,16 +163,14 @@ impl Render for ActionRingPanel {
                         .gap_3()
                         .child(
                             v_flex()
-                                .child(div().text_body().child(tr!("Haptic feedback")))
-                                .child(
-                                    div()
-                                        .text_caption()
-                                        .text_color(pal.text_muted)
-                                        .child(tr!("Play feedback when hovering and activating.")),
-                                ),
+                                .child(div().text_body().child(gpui::text!(tr!("Haptic feedback"))))
+                                .child(div().text_caption().text_color(pal.text_muted).child(
+                                    gpui::text!(tr!("Play feedback when hovering and activating.")),
+                                )),
                         )
                         .child(toggle_button(
                             "ring-haptics",
+                            tr!("Haptic feedback"),
                             ring.haptics,
                             |state, enabled| {
                                 state.commit_action_ring_haptics(enabled);
@@ -217,17 +229,16 @@ fn current_device_supports_haptics(cx: &Context<ActionRingPanel>) -> bool {
 
 fn toggle_button(
     id: &'static str,
+    name: SharedString,
     enabled: bool,
     commit: impl Fn(&mut AppState, bool) + 'static,
-) -> Button {
-    Button::new(id)
-        .compact()
-        .label(if enabled { tr!("On") } else { tr!("Off") })
+) -> crate::ui::components::Toggle {
+    crate::ui::components::Toggle::new(id, name)
         .selected(enabled)
-        .on_click(move |_, _, cx| {
+        .on_change(move |enabled: &bool, _, cx| {
             AppState::update(cx, |state, cx| {
                 let key = state.current_record().map(DeviceRecord::device_key);
-                commit(state, !enabled);
+                commit(state, *enabled);
                 if let Some(key) = key {
                     cx.emit(StateEvent::BindingsChanged(key));
                 }
@@ -304,7 +315,14 @@ fn slot_button(
             ActionRingIcon::asset_path,
         )
     });
-    let accessible_label = label.clone();
+    // The slot's place as well as its action: the action list below names the
+    // same actions, and "Cut" alone could not say whether it was a slot or a
+    // choice. Counted clockwise from the top, which is how the ring is drawn.
+    let accessible_label = tr!(
+        "Slot %{number} of 8: %{action}",
+        number => (index + 1).to_string(),
+        action => label.clone()
+    );
     let selected_view = view.clone();
 
     BaseButton::new(("action-ring-slot", index))
@@ -335,6 +353,9 @@ fn slot_button(
         })
         .cursor_pointer()
         .accessibility_label(accessible_label)
+        // Which slot is open in the editor, in words: the accent ring is the
+        // only other sign of it.
+        .when(selected, |button| button.aria_description(tr!("Editing")))
         .tooltip(move |window, cx| Tooltip::new(label.clone()).build(window, cx))
         .when_some(icon_path, |button, path| {
             button.child(svg().path(path).size(px(20.0)).text_color(if selected {

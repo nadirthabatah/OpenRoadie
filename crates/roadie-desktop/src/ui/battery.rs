@@ -140,7 +140,11 @@ fn status_readout(battery: &BatteryInfo, online: bool, pal: Palette) -> impl Int
                 .child(value_label(battery)),
         )
         .when_some(context_label(battery, online), |row, label| {
-            row.child(gpui::div().text_color(pal.text_muted).child(label))
+            row.child(
+                gpui::div()
+                    .text_color(pal.text_muted)
+                    .child(gpui::text!(label)),
+            )
         })
 }
 

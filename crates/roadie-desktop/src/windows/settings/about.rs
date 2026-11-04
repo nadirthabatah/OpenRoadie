@@ -19,9 +19,9 @@ pub(super) fn about_page(view: Entity<SettingsView>, copied: bool) -> SettingPag
         div()
             .text_caption()
             .text_color(pal.text_muted)
-            .child(tr!(
+            .child(gpui::text!(tr!(
                 "Not affiliated with Logitech. \"Logitech\", \"MX Master\", and \"Options+\" are trademarks of Logitech International S.A."
-            ))
+            )))
     }));
     SettingPage::new(tr!("About"))
         .icon(IconName::Info)
@@ -57,12 +57,14 @@ fn about_hero(view: &Entity<SettingsView>, copied: bool, cx: &mut App) -> gpui::
                     h_flex()
                         .items_center()
                         .gap_2()
-                        .child(div().text_heading().child("OpenRoadie"))
+                        .child(
+                            crate::ui::a11y::heading("about-name", "OpenRoadie", 2).text_heading(),
+                        )
                         .child(
                             div()
                                 .text_body()
                                 .text_color(pal.text_muted)
-                                .child(env!("CARGO_PKG_VERSION")),
+                                .child(gpui::text!(env!("CARGO_PKG_VERSION"))),
                         ),
                 )
                 .child(
@@ -151,13 +153,17 @@ fn about_config(cx: &App) -> gpui::Div {
                 .gap_1()
                 .flex_1()
                 .min_w_0()
-                .child(div().font_weight(FontWeight::MEDIUM).child("config.toml"))
+                .child(
+                    div()
+                        .font_weight(FontWeight::MEDIUM)
+                        .child(gpui::text!("config.toml")),
+                )
                 .child(
                     div()
                         .text_caption()
                         .text_color(pal.text_muted)
                         .truncate()
-                        .child(path),
+                        .child(gpui::text!(path)),
                 ),
         )
         .child(

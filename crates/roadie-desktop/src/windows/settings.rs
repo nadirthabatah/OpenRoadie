@@ -26,7 +26,7 @@ pub(super) use gpui_component::{
     input::{InputEvent, InputState},
     select::{SelectEvent, SelectItem, SelectState},
     setting::{SelectIndex, SettingField, SettingGroup, SettingItem, SettingPage, Settings},
-    slider::{Slider, SliderEvent, SliderState},
+    slider::{SliderEvent, SliderState},
     tag::Tag,
     theme::ThemeConfig,
     v_flex,
@@ -113,10 +113,9 @@ pub struct SettingsView {
     theme_filter: ThemeFilter,
     /// Free-text filter for the Appearance theme grid (search 50+ themes by name).
     theme_search: Entity<InputState>,
-    /// Page selected when the window first opens. Consumed once by the Settings
-    /// widget's keyed state, so it only steers a fresh open (an already-open
-    /// window is just focused).
-    initial_page: SettingsPage,
+    /// The page on show, as an index into [`settings_pages`]. Starts at the page
+    /// the window was opened on; an already-open window is just focused.
+    page_ix: usize,
     language_select: Entity<SelectState<Vec<language::LanguageOption>>>,
     asset_source_select: Entity<SelectState<Vec<assets::AssetSourceOption>>>,
     thumbwheel_sensitivity_slider: Entity<SliderState>,
@@ -258,7 +257,7 @@ impl SettingsView {
             _state_obs: state_obs,
             theme_filter: ThemeFilter::All,
             theme_search,
-            initial_page,
+            page_ix: initial_page.index(),
             language_select,
             asset_source_select,
             thumbwheel_sensitivity_slider,
@@ -483,11 +482,25 @@ impl Render for SettingsView {
         // Filled group boxes use the theme's content-surface token, keeping
         // settings groups distinct from the page without borrowing a control
         // colour for a large card.
-        let settings = Settings::new("settings")
+        let pages = settings_pages();
+        let page_ix = self.page_ix.min(pages.len().saturating_sub(1));
+        // The widget's own sidebar is drawn but cannot be focused or read by a
+        // screen reader, so it is collapsed to nothing and [`page_list`] stands
+        // in for it. One widget per page: its selection lives in keyed state
+        // seeded only on creation, so a new page needs a new key.
+        // Display none, not only zero width: a zero-width sidebar still put its
+        // search field and a button, unseen, in the Tab order.
+        let hidden = gpui::StyleRefinement {
+            display: Some(gpui::Display::None),
+            ..gpui::StyleRefinement::default()
+        };
+        let settings = Settings::new(("settings", page_ix))
             .with_group_variant(GroupBoxVariant::Fill)
-            .sidebar_width(px(210.))
+            .sidebar_width(px(0.))
+            .sidebar_size_range(px(0.)..px(0.))
+            .sidebar_style(&hidden)
             .default_selected_index(SelectIndex {
-                page_ix: self.initial_page.index(),
+                page_ix,
                 group_ix: None,
             })
             .page(general::general_page(
@@ -521,7 +534,7 @@ impl Render for SettingsView {
         #[cfg(target_os = "macos")]
         let settings = settings.page(diagnostics::diagnostics_page());
 
-        div()
+        crate::ui::a11y::group("settings-window", tr!("Settings"))
             .size_full()
             .relative()
             .bg(pal.page)
@@ -544,6 +557,117 @@ impl Render for SettingsView {
                         .child(windows::aux_title_bar(tr!("Settings"), cx)),
                 )
             })
-            .child(settings)
+            .child(
+                h_flex()
+                    .size_full()
+                    .items_stretch()
+                    .child(page_list(&pages, page_ix, pal, cx))
+                    .child(div().flex_1().min_w_0().h_full().child(settings)),
+            )
     }
+}
+
+/// Every page's title and icon, in the order `render` registers the pages.
+fn settings_pages() -> Vec<(SharedString, IconName)> {
+    let mut pages = vec![
+        (tr!("General"), IconName::Settings),
+        (tr!("Updates"), IconName::ArrowDown),
+    ];
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pages.push((tr!("Permissions"), IconName::Info));
+    pages.extend([
+        (tr!("Appearance"), IconName::Palette),
+        (tr!("Assets"), IconName::HardDrive),
+        (tr!("About"), IconName::Info),
+    ]);
+    #[cfg(target_os = "macos")]
+    pages.push((tr!("Diagnostics"), IconName::Info));
+    pages
+}
+
+/// The page list: one tab per page, reachable with Tab and announced as
+/// "General, tab, selected, 1 of 6".
+fn page_list(
+    pages: &[(SharedString, IconName)],
+    active: usize,
+    pal: Palette,
+    cx: &mut Context<SettingsView>,
+) -> impl IntoElement {
+    v_flex()
+        .id("settings-pages")
+        .role(gpui::Role::TabList)
+        .aria_label(tr!("Settings"))
+        .w(px(210.))
+        .h_full()
+        .flex_shrink_0()
+        .gap_1()
+        .p_3()
+        .border_r_1()
+        .border_color(pal.border)
+        .children(
+            pages
+                .iter()
+                .cloned()
+                .enumerate()
+                .map(|(ix, (title, icon))| {
+                    let selected = ix == active;
+                    gpui_base::Button::new(("settings-page", ix))
+                        .role(gpui::Role::Tab)
+                        .selected(selected)
+                        .accessibility_label(title.clone())
+                        .aria_selected(selected)
+                        .w_full()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .px_3()
+                        .py_1p5()
+                        .rounded(pal.control_radius)
+                        .cursor_pointer()
+                        .text_color(if selected {
+                            pal.text_primary
+                        } else {
+                            pal.text_muted
+                        })
+                        .when(selected, |row| row.bg(theme::accent_tint()))
+                        .hover(move |row| row.bg(pal.control_hover))
+                        .focus_visible(move |row| row.border_1().border_color(pal.text_primary))
+                        .child(Icon::new(icon).size_4().flex_none())
+                        .child(title)
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            view.page_ix = ix;
+                            cx.notify();
+                        }))
+                }),
+        )
+}
+
+/// A setting row with an on/off switch, named and described for assistive
+/// technology.
+///
+/// The widget's own `SettingField::switch` draws a switch with no name, so a
+/// screen reader heard "switch, on" and nothing more; the row's title beside
+/// it is drawn as text no screen reader reaches. This switch is called by the
+/// setting's title and carries its description.
+pub(super) fn switch_item(
+    id: &'static str,
+    title: SharedString,
+    description: SharedString,
+    value: impl Fn(&App) -> bool + 'static,
+    set_value: impl Fn(bool, &mut App) + 'static,
+) -> SettingItem {
+    let set_value = Rc::new(set_value);
+    let (name, spoken) = (title.clone(), description.clone());
+    SettingItem::new(
+        title,
+        SettingField::render(move |options, _, cx| {
+            let set_value = set_value.clone();
+            crate::ui::components::Toggle::new(id, name.clone())
+                .description(spoken.clone())
+                .selected(value(cx))
+                .disabled(options.is_disabled())
+                .on_change(move |on, _, cx| set_value(*on, cx))
+        }),
+    )
+    .description(description)
 }

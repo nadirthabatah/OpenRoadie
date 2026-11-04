@@ -319,7 +319,7 @@ fn step_preview(step: &WorkflowStep, pal: Palette) -> impl IntoElement {
     div()
         .text_caption()
         .text_color(pal.text_primary)
-        .child(text)
+        .child(gpui::text!(text))
 }
 
 fn key_combo_preview(combo: &KeyCombo) -> String {

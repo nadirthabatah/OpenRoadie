@@ -113,7 +113,12 @@ fn empty_inspector(app: Option<&str>, override_count: usize, pal: Palette) -> gp
     v_flex()
         .gap_3()
         .child(inspector_heading(tr!("Button inspector"), None, pal))
-        .child(div().text_body().text_color(pal.text_muted).child(summary))
+        .child(
+            div()
+                .text_body()
+                .text_color(pal.text_muted)
+                .child(gpui::text!(summary)),
+        )
 }
 
 fn button_inspector(
@@ -243,10 +248,15 @@ fn inherited_gesture_inspector(
             pal,
         ))
         .child(gesture_summary_card(picker, pal))
-        .child(div().text_caption().text_color(pal.text_muted).child(tr!(
-            "Choosing an action replaces the inherited gestures in %{app}.",
-            app => app.to_string()
-        )))
+        .child(
+            div()
+                .text_caption()
+                .text_color(pal.text_muted)
+                .child(gpui::text!(tr!(
+                    "Choosing an action replaces the inherited gestures in %{app}.",
+                    app => app.to_string()
+                ))),
+        )
         .child(
             Button::new("inspector-edit-default-gestures")
                 .small()
@@ -368,7 +378,7 @@ fn gesture_directions(
                                 .child(
                                     v_flex()
                                         .min_w_0()
-                                        .child(div().text_body().child(tr!(direction.label())))
+                                        .child(div().text_body().child(gpui::text!(tr!(direction.label()))))
                                         .child(
                                             div()
                                                 .truncate()
@@ -457,7 +467,7 @@ fn thumbwheel_inspector(
                                                 .size_4()
                                                 .text_color(pal.text_muted),
                                         )
-                                        .child(div().child(tr!(preset.label()))),
+                                        .child(div().child(gpui::text!(tr!(preset.label())))),
                                 )
                                 .when(selected, |row| {
                                     row.child(
@@ -507,12 +517,12 @@ fn inspector_heading(
 ) -> impl IntoElement {
     v_flex()
         .gap_1()
-        .child(div().text_heading().child(title))
+        .child(div().text_heading().child(gpui::text!(title)))
         .children(status.map(|status| {
             div()
                 .text_caption()
                 .text_color(pal.text_muted)
-                .child(status)
+                .child(gpui::text!(status))
         }))
 }
 
@@ -572,7 +582,7 @@ fn selection_card(
             div()
                 .text_caption()
                 .text_color(pal.text_muted)
-                .child(caption),
+                .child(gpui::text!(caption)),
         )
         .child(
             h_flex()
@@ -640,7 +650,7 @@ fn action_library(
                             .py_3()
                             .text_body()
                             .text_color(pal.text_muted)
-                            .child(tr!("No actions found")),
+                            .child(gpui::text!(tr!("No actions found"))),
                     )
                 })
                 .children(rows),

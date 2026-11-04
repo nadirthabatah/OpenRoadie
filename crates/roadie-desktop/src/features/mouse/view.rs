@@ -337,7 +337,8 @@ fn workspace_layout(
     inspector: impl IntoElement,
     focus_handle: &FocusHandle,
 ) -> impl IntoElement {
-    h_flex()
+    crate::ui::a11y::group("mouse-buttons-panel", tr!("Buttons"))
+        .flex()
         .flex_1()
         .min_h_0()
         .w_full()
@@ -630,7 +631,9 @@ impl RenderOnce for LabelTrigger {
             .selected(selected)
             .accessibility_label(tr!("Bind %{name}", name => button_name.clone()))
             .aria_description(binding_description)
-            .aria_selected(selected)
+            // No `aria_selected`: AccessKit treats a selected button as a
+            // selection item, which has no Invoke, so assistive technology could
+            // not press it.
             .flex()
             .flex_col()
             .w(px(LABEL_W))
@@ -875,8 +878,13 @@ impl RenderOnce for HotspotTrigger {
 
         BaseButton::new(self.id)
             .selected(selected)
-            .accessibility_label(tr!("Bind %{name}", name => tr!(btn.label())))
-            .aria_selected(selected)
+            // Out of the accessibility tree and the Tab order: each dot is the
+            // same control as the labelled card beside the picture, which names
+            // the button and says what it is bound to. Two of everything doubled
+            // the Tab stops and left a screen reader with no way to tell them
+            // apart. The dot stays for anyone pointing at the picture.
+            .role(gpui_base::RoleOverride::Presentational)
+            .tab_stop(false)
             .flex()
             .items_center()
             .justify_center()

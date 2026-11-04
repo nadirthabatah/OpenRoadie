@@ -1,20 +1,17 @@
 //! Drawing a monitor.
 
 use gpui::{
-    AppContext as _, Context, Entity, IntoElement, ParentElement, Styled, Window, div,
+    Context, Entity, IntoElement, ParentElement, Styled, Text, Window, div,
     prelude::FluentBuilder as _,
 };
-use gpui_component::{
-    h_flex,
-    slider::{Slider, SliderEvent, SliderState},
-    v_flex,
-};
+use gpui_component::{h_flex, v_flex};
 use roadie_ipc::desk::{DisplayControl, DisplayReading, DisplaySummary};
 
 use super::{DeskPanel, Slot, WriteKey};
 use crate::features::desk::model::describe_value;
 use crate::services::ipc::{Command, DeskCommand};
 use crate::state::AppState;
+use crate::ui::a11y::{self, LevelChosen, LevelModel, LevelSlider, Span};
 use crate::ui::theme::{Palette, Typography as _};
 
 impl DeskPanel {
@@ -60,9 +57,8 @@ impl DeskPanel {
         &mut self,
         id: &str,
         reading: DisplayReading,
-        window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Entity<SliderState> {
+    ) -> Entity<LevelModel> {
         let key = (id.to_owned(), reading.control);
         if let Some(existing) = self.display_sliders.get_mut(&key) {
             if existing.shown != reading.current {
@@ -71,38 +67,22 @@ impl DeskPanel {
                 // monitor, because the monitor is what is true.
                 existing.shown = reading.current;
                 let state = existing.state.clone();
-                state.update(cx, |slider, cx| {
-                    slider.set_value(f32::from(reading.current), window, cx);
-                });
+                state.update(cx, |slider, cx| slider.sync(reading.current, cx));
                 return state;
             }
             return existing.state.clone();
         }
-        let maximum = f32::from(reading.maximum.max(1));
-        let slider = cx.new(|_| {
-            SliderState::new()
-                .min(0.0)
-                .max(maximum)
-                .step(1.0)
-                .default_value(f32::from(reading.current))
-        });
+        let slider = a11y::level_model(reading.current, Span::to(reading.maximum.max(1)), cx);
         let handle = id.to_owned();
         let control = reading.control;
-        let subscription = cx.subscribe(&slider, move |panel, _slider, event: &SliderEvent, cx| {
-            // Release, not change: a monitor answers a DDC write in tens of
-            // milliseconds, and writing on every pixel of a drag would queue
-            // hundreds of exchanges behind a person's thumb.
-            if let SliderEvent::Release(value) = event {
-                let asked = value.start().round().clamp(0.0, f32::from(u16::MAX));
-                #[expect(
-                    clippy::cast_possible_truncation,
-                    clippy::cast_sign_loss,
-                    reason = "clamped to u16's range on the line above"
-                )]
-                let asked = asked as u16;
-                panel.set_display(handle.clone(), control, asked, cx);
-            }
-        });
+        // A choice, not a movement: a key press, an assistive-technology step,
+        // or the release of a drag. A monitor answers a DDC write in tens of
+        // milliseconds, and writing on every pixel of a drag would queue
+        // hundreds of exchanges behind a person's thumb.
+        let subscription =
+            cx.subscribe(&slider, move |panel, _slider, chosen: &LevelChosen, cx| {
+                panel.set_display(handle.clone(), control, chosen.0, cx);
+            });
         self.subscriptions.push(subscription);
         self.display_sliders.insert(
             key,
@@ -119,7 +99,7 @@ impl DeskPanel {
         &mut self,
         display: &DisplaySummary,
         pal: Palette,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let readings: Vec<DisplayReading> = self.model.readings(&display.id).to_vec();
@@ -127,35 +107,53 @@ impl DeskPanel {
         let rows: Vec<_> = readings
             .iter()
             .map(|reading| {
-                let label = match reading.control {
-                    DisplayControl::Brightness => tr!("Brightness"),
-                    DisplayControl::Contrast => tr!("Contrast"),
-                    DisplayControl::Volume => tr!("Volume"),
-                    DisplayControl::Input => tr!("Input"),
+                let (slug, label) = match reading.control {
+                    DisplayControl::Brightness => ("brightness", tr!("Brightness")),
+                    DisplayControl::Contrast => ("contrast", tr!("Contrast")),
+                    DisplayControl::Volume => ("volume", tr!("Volume")),
+                    DisplayControl::Input => ("input", tr!("Input")),
                 };
                 let value = describe_value(*reading);
-                // Input is read, never written — see this module's header.
-                let slider = (reading.control != DisplayControl::Input)
-                    .then(|| self.display_slider(&display.id, *reading, window, cx));
+                // Input is read, never written — see this module's header. So
+                // it is a reading; every other control is a slider that says
+                // its own name and value, and drawing a second reading above it
+                // would announce the same thing twice.
+                if reading.control == DisplayControl::Input {
+                    return Self::reading_row(slug, label.to_string(), value, pal)
+                        .into_any_element();
+                }
+                let slider = self.display_slider(&display.id, *reading, cx);
                 v_flex()
                     .gap_1()
                     .child(
                         h_flex()
                             .justify_between()
-                            .child(div().text_caption().child(label))
-                            .child(div().text_caption().text_color(pal.text_muted).child(value)),
+                            .child(
+                                div()
+                                    .text_caption()
+                                    .child(Text::new_inaccessible(label.clone())),
+                            )
+                            .child(
+                                div()
+                                    .text_caption()
+                                    .text_color(pal.text_muted)
+                                    .child(Text::new_inaccessible(value.clone().into())),
+                            ),
                     )
-                    .when_some(slider, |row, state| {
-                        row.child(Slider::new(&state).horizontal())
-                    })
+                    .child(LevelSlider::new(slug, &slider, label, value))
+                    .into_any_element()
             })
             .collect();
 
-        Self::card(pal)
-            .child(div().text_body().child(display.name.clone()))
-            .when_some(reason, |card, why| {
-                card.child(div().text_caption().text_color(pal.text_muted).child(why))
-            })
-            .children(rows)
+        Self::card(
+            &format!("display-{}", display.id),
+            display.name.clone(),
+            pal,
+        )
+        .child(a11y::heading("name", display.name.clone(), 3).text_body())
+        .when_some(reason, |card, why| {
+            card.child(Self::caption("unreachable", why, pal))
+        })
+        .children(rows)
     }
 }

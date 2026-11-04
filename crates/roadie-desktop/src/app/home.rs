@@ -69,12 +69,12 @@ pub(super) fn home_header(cx: &mut Context<AppView>) -> impl IntoElement {
                 .flex_1()
                 .min_w_0()
                 .gap_0p5()
-                .child(div().text_heading().child(tr!("Devices")))
+                .child(crate::ui::a11y::heading("home-title", tr!("Devices"), 1).text_heading())
                 .child(
                     div()
                         .text_caption()
                         .text_color(pal.text_muted)
-                        .child(device_count_label),
+                        .child(crate::ui::a11y::label("home-count", device_count_label)),
                 ),
         )
         .child(views::device_view_switcher(current_mode, view))
@@ -405,6 +405,10 @@ pub(super) fn device_menu_button(record: &DeviceRecord, pal: Palette) -> impl In
         .xsmall()
         .text_color(pal.text_muted)
         .icon(IconName::Ellipsis)
+        .child(crate::ui::a11y::spoken_name(
+            "name",
+            tr!("More options for %{name}", name => record.display_name.clone()),
+        ))
         .dropdown_menu_with_anchor(Anchor::TopRight, device_menu(record))
 }
 
@@ -460,7 +464,7 @@ fn open_rename_dialog(
                     div()
                         .text_caption()
                         .text_color(theme::palette(cx).text_muted)
-                        .child(tr!("Leave blank to use the model name.")),
+                        .child(gpui::text!(tr!("Leave blank to use the model name."))),
                 ),
             )
             .button_props(
@@ -660,16 +664,16 @@ pub(super) fn device_empty_state(cx: &App) -> Div {
         .child(
             div()
                 .text_title()
-                .child(tr!("No devices connected")),
+                .child(gpui::text!(tr!("No devices connected"))),
         )
         .child(
             div()
                 .max_w(ContentWidth::Narrow.rems())
                 .text_body()
                 .text_center()
-                .child(tr!(
+                .child(gpui::text!(tr!(
                     "Plug in or pair a supported Logitech device — it'll show up here automatically. For direct Bluetooth connections, pair in your computer's bluetooth settings."
-                )),
+                ))),
         )
         .child(
             Button::new("empty-add-device")
@@ -678,7 +682,7 @@ pub(super) fn device_empty_state(cx: &App) -> Div {
                 .label(tr!("Add Device"))
                 .on_click(|_, _, cx| crate::windows::add_device::open(cx)),
         )
-        .child(div().mt_1().max_w(ContentWidth::Narrow.rems()).text_caption().text_center().text_color(pal.text_muted).child(tr!(
+        .child(div().mt_1().max_w(ContentWidth::Narrow.rems()).text_caption().text_center().text_color(pal.text_muted).child(gpui::text!(tr!(
             "Using Logi Options+? Quit it first — both apps compete for HID++ access."
-        )))
+        ))))
 }

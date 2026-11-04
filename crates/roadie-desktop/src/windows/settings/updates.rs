@@ -2,8 +2,8 @@
 
 use super::{
     App, AppState, Button, ButtonVariants, Disableable, Entity, FontWeight, IconName,
-    ParentElement, RELEASES_URL, SettingField, SettingGroup, SettingItem, SettingPage, Sizable,
-    StateEvent, Styled, Tag, UpdateStatus, Updater, div, h_flex, img, px, v_flex,
+    ParentElement, RELEASES_URL, SettingGroup, SettingItem, SettingPage, Sizable, StateEvent,
+    Styled, Tag, UpdateStatus, Updater, div, h_flex, img, px, v_flex,
 };
 use crate::ui::theme::Typography as _;
 
@@ -16,43 +16,32 @@ pub(super) fn updates_page(updater: Entity<Updater>) -> SettingPage {
     }));
 
     let toggles = SettingGroup::new()
-        .item(
-            SettingItem::new(
-                tr!("Check for updates"),
-                SettingField::switch(
-                    |cx| AppState::try_read(cx).is_some_and(|s| s.app_settings().check_for_updates),
-                    |enabled, cx| {
-                        AppState::update(cx, move |state, cx| {
-                            state.set_check_for_updates(enabled);
-                            cx.emit(StateEvent::SettingsChanged);
-                        });
-                    },
-                ),
-            )
-            .description(tr!(
-                "Check once per launch for a new version (query only — no automatic download)."
-            )),
-        )
-        .item(
-            SettingItem::new(
-                tr!("Automatically download and install"),
-                SettingField::switch(
-                    |cx| {
-                        AppState::try_read(cx)
-                            .is_some_and(|s| s.app_settings().auto_install_updates)
-                    },
-                    |enabled, cx| {
-                        AppState::update(cx, move |state, cx| {
-                            state.set_auto_install_updates(enabled);
-                            cx.emit(StateEvent::SettingsChanged);
-                        });
-                    },
-                ),
-            )
-            .description(tr!(
+        .item(super::switch_item(
+            "check-for-updates",
+            tr!("Check for updates"),
+            tr!("Check once per launch for a new version (query only — no automatic download)."),
+            |cx| AppState::try_read(cx).is_some_and(|s| s.app_settings().check_for_updates),
+            |enabled, cx| {
+                AppState::update(cx, move |state, cx| {
+                    state.set_check_for_updates(enabled);
+                    cx.emit(StateEvent::SettingsChanged);
+                });
+            },
+        ))
+        .item(super::switch_item(
+            "auto-install-updates",
+            tr!("Automatically download and install"),
+            tr!(
                 "Download updates in the background and apply them the next time OpenRoadie restarts."
-            )),
-        );
+            ),
+            |cx| AppState::try_read(cx).is_some_and(|s| s.app_settings().auto_install_updates),
+            |enabled, cx| {
+                AppState::update(cx, move |state, cx| {
+                    state.set_auto_install_updates(enabled);
+                    cx.emit(StateEvent::SettingsChanged);
+                });
+            },
+        ));
 
     let source = SettingGroup::new().item(SettingItem::render(move |_, _, cx| update_source(cx)));
     SettingPage::new(tr!("Updates"))
@@ -75,10 +64,10 @@ fn update_hero(updater: &Entity<Updater>, cx: &mut App) -> gpui::Div {
     // A short status tag for the settled states (semantic colours from the theme);
     // transient states carry their detail in the message line instead.
     let pill = match &status {
-        UpdateStatus::UpToDate => Some(Tag::success().child(tr!("Up to date"))),
-        UpdateStatus::Available(_) => Some(Tag::info().child(tr!("Update available"))),
-        UpdateStatus::Staged(_) => Some(Tag::success().child(tr!("Update ready"))),
-        UpdateStatus::Errored(_) => Some(Tag::danger().child(tr!("Update failed"))),
+        UpdateStatus::UpToDate => Some(Tag::success().child(gpui::text!(tr!("Up to date")))),
+        UpdateStatus::Available(_) => Some(Tag::info().child(gpui::text!(tr!("Update available")))),
+        UpdateStatus::Staged(_) => Some(Tag::success().child(gpui::text!(tr!("Update ready")))),
+        UpdateStatus::Errored(_) => Some(Tag::danger().child(gpui::text!(tr!("Update failed")))),
         _ => None,
     };
 
@@ -192,7 +181,7 @@ fn update_source(cx: &App) -> gpui::Div {
                         .child(
                             div()
                                 .font_weight(FontWeight::MEDIUM)
-                                .child(tr!("Update source")),
+                                .child(gpui::text!(tr!("Update source"))),
                         )
                         .child(
                             div()
@@ -216,8 +205,8 @@ fn update_source(cx: &App) -> gpui::Div {
             div()
                 .text_caption()
                 .text_color(pal.text_muted)
-                .child(tr!(
+                .child(gpui::text!(tr!(
                     "No background updater — OpenRoadie only connects when you turn on automatic checks or click Check for Updates."
-                )),
+                ))),
         )
 }

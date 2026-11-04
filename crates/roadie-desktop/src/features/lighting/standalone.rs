@@ -11,7 +11,7 @@ use gpui::{
 };
 use gpui_component::{
     Icon, IconName, Selectable as _, h_flex,
-    slider::{Slider, SliderEvent, SliderState},
+    slider::{SliderEvent, SliderState},
     v_flex,
 };
 use roadie_core::{
@@ -170,6 +170,10 @@ impl LightPanel {
 }
 
 impl Render for LightPanel {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the panel lays out its sections inline"
+    )]
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let pal = theme::palette(cx);
         let settings = AppState::try_read(cx)
@@ -242,11 +246,18 @@ impl Render for LightPanel {
                 let value = range
                     .native_for_percent(settings.brightness_percent)
                     .unwrap_or_else(|| range.min());
+                let shown = format_light_value(value, range.unit());
+                let spoken = gpui::SharedString::from(shown.clone());
                 panel.child(control_well(
                     tr!("Brightness"),
-                    format_light_value(value, range.unit()),
+                    shown,
                     format_range_endpoints(range),
-                    Slider::new(slider).horizontal(),
+                    crate::ui::a11y::StateSlider::new(
+                        "standalone-light-brightness",
+                        slider,
+                        tr!("Brightness"),
+                        move |_| spoken.clone(),
+                    ),
                     pal,
                 ))
             })
@@ -254,11 +265,18 @@ impl Render for LightPanel {
                 let value = settings
                     .temperature_kelvin
                     .map_or_else(|| midpoint(range), |kelvin| range.quantize(kelvin));
+                let shown = format_light_value(value, range.unit());
+                let spoken = gpui::SharedString::from(shown.clone());
                 panel.child(control_well(
                     tr!("Colour temperature"),
-                    format_light_value(value, range.unit()),
+                    shown,
                     format_range_endpoints(range),
-                    Slider::new(slider).horizontal(),
+                    crate::ui::a11y::StateSlider::new(
+                        "standalone-light-temperature",
+                        slider,
+                        tr!("Colour temperature"),
+                        move |_| spoken.clone(),
+                    ),
                     pal,
                 ))
             })
@@ -292,7 +310,7 @@ fn light_hero(device_name: &str, view: LightView, pal: Palette) -> impl IntoElem
                 )),
         )
         .child(
-            Toggle::new("standalone-light-toggle")
+            Toggle::new("standalone-light-toggle", tr!("Light"))
                 .selected(effective_enabled)
                 .icon(if effective_enabled {
                     IconName::Sun
@@ -373,14 +391,14 @@ fn camera_automation(current: LightSettings, pal: Palette) -> impl IntoElement {
                     div()
                         .text_body()
                         .text_color(pal.text_primary)
-                        .child(tr!("Auto-on with camera")),
+                        .child(gpui::text!(tr!("Auto-on with camera"))),
                 )
-                .child(div().text_caption().text_color(pal.text_muted).child(tr!(
+                .child(div().text_caption().text_color(pal.text_muted).child(gpui::text!(tr!(
                     "Turn this light on while any camera is in use and off when cameras stop."
-                ))),
+                )))),
         )
         .child(
-            Toggle::new("standalone-light-camera-automation")
+            Toggle::new("standalone-light-camera-automation", tr!("Auto-on with camera"))
                 .selected(current.auto_camera)
                 .min_width(px(72.))
                 .on_change(|auto_camera, _window, cx| {
@@ -429,7 +447,12 @@ fn control_well(
             h_flex()
                 .justify_between()
                 .items_baseline()
-                .child(div().text_caption().text_color(pal.text_muted).child(title))
+                .child(
+                    div()
+                        .text_caption()
+                        .text_color(pal.text_muted)
+                        .child(gpui::text!(title)),
+                )
                 .child(
                     div()
                         .text_body()

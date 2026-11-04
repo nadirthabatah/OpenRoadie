@@ -20,7 +20,7 @@ use gpui::{
 use gpui_base::Button as BaseButton;
 use gpui_component::{
     IconName, Selectable as _, h_flex,
-    slider::{Slider, SliderEvent, SliderState},
+    slider::{SliderEvent, SliderState},
     v_flex,
 };
 use roadie_camera::{AutoToggle, CameraControl, CameraState, ControlRange};
@@ -715,7 +715,9 @@ impl Render for CameraControlsPanel {
             return div()
                 .text_body()
                 .text_color(pal.text_muted)
-                .child(tr!("This camera exposes no adjustable image controls."));
+                .child(gpui::text!(tr!(
+                    "This camera exposes no adjustable image controls."
+                )));
         }
 
         let lens: Vec<usize> = section_indices(&self.sliders, true);
@@ -858,7 +860,12 @@ fn control_row(
                 // Dimmed while auto owns the value, but still draggable —
                 // grabbing the slider takes the control over to manual.
                 .when(dimmed, |s| s.opacity(0.55))
-                .child(Slider::new(&slider.state).horizontal()),
+                .child(crate::ui::a11y::StateSlider::new(
+                    ("camera-control-slider", ix),
+                    &slider.state,
+                    slider.label.clone(),
+                    |value| gpui::SharedString::from(format!("{value:.0}")),
+                )),
         )
         .child(
             div()
@@ -902,7 +909,7 @@ fn control_row(
                 })
                 .hover(move |s| s.bg(chip_hover_fill(on, pal)))
                 .focus_visible(move |s| s.bg(chip_hover_fill(on, pal)))
-                .child(tr!("Auto"))
+                .child(gpui::text!(tr!("Auto")))
                 .on_click(cx.listener(move |panel, _: &ClickEvent, _window, cx| {
                     panel.toggle_auto(auto_ix, cx);
                 })),
@@ -1071,7 +1078,7 @@ fn reset_button(cx: &mut Context<CameraControlsPanel>) -> gpui::Div {
             .focus_visible(|s| s.bg(pal.control_hover))
             .text_caption()
             .text_color(pal.text_muted)
-            .child(tr!("Reset to defaults"))
+            .child(gpui::text!(tr!("Reset to defaults")))
             .on_click(cx.listener(|panel, _: &ClickEvent, window, cx| {
                 panel.reset(window, cx);
             })),

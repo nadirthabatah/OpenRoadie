@@ -12,7 +12,6 @@ use gpui_component::{
     description_list::{DescriptionItem, DescriptionList},
     h_flex,
     scroll::ScrollableElement as _,
-    switch::Switch,
     v_flex,
 };
 use roadie_core::config::ScrollResolution;
@@ -77,7 +76,7 @@ pub(super) fn detail_header(
                 .max_w(px(220.))
                 .truncate()
                 .text_heading()
-                .child(name),
+                .child(gpui::text!(name)),
         )
         .child(div().flex_1())
         .children(battery)
@@ -150,9 +149,9 @@ pub(super) fn detail_content(
                     .text_caption()
                     .text_color(pal.text_muted)
                     .child(Icon::new(IconName::Info).size_4())
-                    .child(tr!(
+                    .child(gpui::text!(tr!(
                         "Device offline — changes will apply when it reconnects."
-                    )),
+                    ))),
             )
         })
         .child(
@@ -417,17 +416,17 @@ fn scrolling_card(pal: Palette, cx: &mut Context<AppView>) -> impl IntoElement {
                     div()
                         .text_body()
                         .text_color(pal.text_primary)
-                        .child(tr!("Invert scroll direction")),
+                        .child(gpui::text!(tr!("Invert scroll direction"))),
                 )
                 .child(
                     div()
                         .text_caption()
                         .text_color(pal.text_muted)
-                        .child(inversion_description),
+                        .child(gpui::text!(inversion_description)),
                 ),
         )
         .child(
-            Toggle::new("invert-scroll-toggle")
+            Toggle::new("invert-scroll-toggle", tr!("Invert scroll direction"))
                 .selected(inverted)
                 .disabled(!inversion_supported)
                 .label((!inversion_supported).then(|| tr!("Unavailable")))
@@ -462,13 +461,13 @@ fn scrolling_card(pal: Palette, cx: &mut Context<AppView>) -> impl IntoElement {
                     div()
                         .text_body()
                         .text_color(pal.text_primary)
-                        .child(tr!("Wheel resolution")),
+                        .child(gpui::text!(tr!("Wheel resolution"))),
                 )
                 .child(
                     div()
                         .text_caption()
                         .text_color(pal.text_muted)
-                        .child(resolution_description),
+                        .child(gpui::text!(resolution_description)),
                 ),
         )
         .child(wheel_resolution_control(
@@ -488,40 +487,53 @@ fn wheel_resolution_control(selected: Option<ScrollResolution>, enabled: bool) -
         Some(ScrollResolution::Low),
         Some(ScrollResolution::High),
     ];
-    ButtonGroup::new("wheel-resolution")
+    // A named group, so the three choices are announced as the wheel's
+    // resolution — and, when the mouse cannot take one, as unavailable, which
+    // a screen reader had no other way to learn: a disabled button here simply
+    // could not be focused.
+    let name = if enabled {
+        tr!("Wheel resolution")
+    } else {
+        tr!("%{name}, unavailable", name => tr!("Wheel resolution"))
+    };
+    crate::ui::a11y::group("wheel-resolution-group", name)
         .w_full()
-        .outline()
-        .disabled(!enabled)
         .child(
-            Button::new("wheel-resolution-default")
-                .flex_1()
-                .label(tr!("Device default"))
-                .selected(selected.is_none()),
+            ButtonGroup::new("wheel-resolution")
+                .w_full()
+                .outline()
+                .disabled(!enabled)
+                .child(
+                    Button::new("wheel-resolution-default")
+                        .flex_1()
+                        .label(tr!("Device default"))
+                        .selected(selected.is_none()),
+                )
+                .child(
+                    Button::new("wheel-resolution-low")
+                        .flex_1()
+                        .label(tr!("Standard"))
+                        .selected(selected == Some(ScrollResolution::Low)),
+                )
+                .child(
+                    Button::new("wheel-resolution-high")
+                        .flex_1()
+                        .label(tr!("High resolution"))
+                        .selected(selected == Some(ScrollResolution::High)),
+                )
+                .on_click(move |indices, _window, cx| {
+                    let Some(value) = indices.first().and_then(|index| values.get(*index)) else {
+                        return;
+                    };
+                    AppState::update(cx, |state, cx| {
+                        let key = state.current_record().map(DeviceRecord::device_key);
+                        state.commit_scroll_resolution(*value);
+                        if let Some(key) = key {
+                            cx.emit(StateEvent::DeviceConfigChanged(key));
+                        }
+                    });
+                }),
         )
-        .child(
-            Button::new("wheel-resolution-low")
-                .flex_1()
-                .label(tr!("Standard"))
-                .selected(selected == Some(ScrollResolution::Low)),
-        )
-        .child(
-            Button::new("wheel-resolution-high")
-                .flex_1()
-                .label(tr!("High resolution"))
-                .selected(selected == Some(ScrollResolution::High)),
-        )
-        .on_click(move |indices, _window, cx| {
-            let Some(value) = indices.first().and_then(|index| values.get(*index)) else {
-                return;
-            };
-            AppState::update(cx, |state, cx| {
-                let key = state.current_record().map(DeviceRecord::device_key);
-                state.commit_scroll_resolution(*value);
-                if let Some(key) = key {
-                    cx.emit(StateEvent::DeviceConfigChanged(key));
-                }
-            });
-        })
 }
 
 /// Lighting tab: the RGB controls (swatches, on/off, brightness) in a titled
@@ -652,7 +664,7 @@ fn device_details_card(pal: Palette, cx: &mut Context<AppView>) -> impl IntoElem
                 div()
                     .text_body()
                     .text_color(pal.text_muted)
-                    .child(tr!("No active device"))
+                    .child(gpui::text!(tr!("No active device")))
                     .into_any_element()
             },
             |record| {
@@ -709,15 +721,15 @@ fn configuration_card(pal: Palette, cx: &mut Context<AppView>) -> impl IntoEleme
                 .items_center()
                 .child(
                     v_flex()
-                        .child(div().text_body().child(tr!("Manage this device")))
-                        .child(div().text_caption().text_color(pal.text_muted).child(tr!(
+                        .child(div().text_body().child(gpui::text!(tr!("Manage this device"))))
+                        .child(div().text_caption().text_color(pal.text_muted).child(gpui::text!(tr!(
                             "Off leaves every control native and stops re-applying settings."
-                        ))),
+                        )))),
                 )
                 .child(
-                    Switch::new("device-enabled")
-                        .checked(device_enabled)
-                        .on_click(|checked, _window, cx| {
+                    Toggle::new("device-enabled", tr!("Manage this device"))
+                        .selected(device_enabled)
+                        .on_change(|checked, _window, cx| {
                             let enabled = *checked;
                             AppState::update(cx, |state, cx| {
                                 let record = state
@@ -797,7 +809,7 @@ fn device_summary(
                     div()
                         .text_caption()
                         .text_color(pal.text_muted)
-                        .child(subtitle),
+                        .child(gpui::text!(subtitle)),
                 ),
         )
         .child(status_badge(online, pal))

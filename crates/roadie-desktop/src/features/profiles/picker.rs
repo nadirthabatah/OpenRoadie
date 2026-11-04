@@ -130,7 +130,7 @@ fn add_app_content(
                     .pb_1()
                     .text_caption()
                     .text_color(pal.text_muted)
-                    .child(tr!("Recent applications")),
+                    .child(gpui::text!(tr!("Recent applications"))),
             )
         })
         .children(recent_rows)
@@ -270,7 +270,7 @@ fn applications_toggle(
                     .size_4(),
                 ),
         )
-        .child(tr!("All applications"))
+        .child(gpui::text!(tr!("All applications")))
         .on_click(move |_event, _window, cx| {
             catalog.update(cx, AppCatalogPicker::toggle_expanded);
         })
@@ -328,7 +328,7 @@ fn catalog_message(message: gpui::SharedString, pal: Palette) -> impl IntoElemen
         .py_2()
         .text_caption()
         .text_color(pal.text_muted)
-        .child(message)
+        .child(gpui::text!(message))
 }
 
 fn application_list_height(rows: usize) -> f32 {

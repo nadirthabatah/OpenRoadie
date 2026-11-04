@@ -266,11 +266,11 @@ pub(crate) fn profile_canvas_status(cx: &App) -> Option<gpui::Div> {
             .pt_4()
             .text_caption()
             .text_color(pal.text_muted)
-            .child(div().flex_1().min_w_0().child(summary))
+            .child(div().flex_1().min_w_0().child(gpui::text!(summary)))
             .child(
                 div()
                     .flex_none()
-                    .child(tr!("Active: %{profile}", profile => active)),
+                    .child(gpui::text!(tr!("Active: %{profile}", profile => active))),
             ),
     )
 }

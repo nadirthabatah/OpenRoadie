@@ -29,7 +29,12 @@ pub(super) fn loading_body(caption: SharedString, cx: &App) -> Div {
         .justify_center()
         .gap_3()
         .child(Spinner::new().large().color(pal.text_muted))
-        .child(div().text_body().text_color(pal.text_muted).child(caption))
+        .child(
+            div()
+                .text_body()
+                .text_color(pal.text_muted)
+                .child(crate::ui::a11y::label("loading-caption", caption)),
+        )
 }
 
 /// Static centered notice — icon, headline, muted caption — for the
@@ -49,14 +54,14 @@ pub(super) fn notice_body(headline: SharedString, caption: SharedString, cx: &Ap
                 .size_8()
                 .text_color(rgb(theme::STATUS_CONNECTING)),
         )
-        .child(div().text_title().child(headline))
+        .child(crate::ui::a11y::heading("notice-headline", headline, 1).text_title())
         .child(
             div()
                 .max_w(ContentWidth::Narrow.rems())
                 .text_body()
                 .text_center()
                 .text_color(pal.text_muted)
-                .child(caption),
+                .child(crate::ui::a11y::label("notice-caption", caption)),
         )
 }
 
@@ -163,7 +168,9 @@ fn accessibility_status(pal: Palette) -> impl IntoElement {
                 .rounded_full()
                 .bg(rgb(theme::STATUS_CONNECTING)),
         )
-        .child(div().child(tr!("Accessibility not granted · click to grant")))
+        .child(div().child(gpui::text!(tr!(
+            "Accessibility not granted · click to grant"
+        ))))
         .on_click(|_, _, cx| super::request_accessibility(cx))
 }
 

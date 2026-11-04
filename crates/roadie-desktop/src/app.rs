@@ -1,7 +1,7 @@
 use gpui::{
     App, AppContext as _, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
-    MouseButton, NavigationDirection, ParentElement, Render, Styled, Subscription, Window, div,
-    prelude::FluentBuilder as _, rgb,
+    MouseButton, NavigationDirection, ParentElement, Render, StatefulInteractiveElement as _,
+    Styled, Subscription, Window, div, prelude::FluentBuilder as _, rgb,
 };
 use gpui_base::Button as BaseButton;
 use gpui_component::{
@@ -356,7 +356,10 @@ impl AppView {
     /// the OS still sees it), and the contextual [`NavigateBack`] action, bound
     /// to Alt+Left (what a rebound BrowserBack action injects on Linux and what
     /// keyboard users expect).
-    fn with_back_navigation(root: gpui::Div, cx: &mut Context<Self>) -> gpui::Div {
+    fn with_back_navigation(
+        root: gpui::Stateful<gpui::Div>,
+        cx: &mut Context<Self>,
+    ) -> gpui::Stateful<gpui::Div> {
         root.on_mouse_down(
             MouseButton::Navigate(NavigationDirection::Back),
             cx.listener(|this, _, _, cx| {
@@ -390,31 +393,31 @@ impl AppView {
             .child(
                 div()
                     .text_title()
-                    .child(tr!("Accessibility permission required")),
+                    .child(gpui::text!(tr!("Accessibility permission required"))),
             )
             .child(
                 div()
                     .max_w(ContentWidth::Narrow.rems())
                     .text_body()
                     .text_color(pal.text_muted)
-                    .child(tr!(
+                    .child(gpui::text!(tr!(
                         "OpenRoadie captures mouse buttons (Back / Forward / gesture button) \
                          through the system Accessibility permission and runs the actions you \
                          bind. Features that talk to the device directly — DPI, SmartShift — \
                          are unaffected."
-                    )),
+                    ))),
             )
             .child(
                 div()
                     .max_w(ContentWidth::Narrow.rems())
                     .text_body()
                     .text_color(pal.text_muted)
-                    .child(tr!(
+                    .child(gpui::text!(tr!(
                         "Enable “OpenRoadie Agent” in the Accessibility list — the \
                          background agent owns the mouse hook, not the OpenRoadie app. \
                          If it already shows as enabled, remove the stale entry with \
                          the − button and add it back."
-                    )),
+                    ))),
             )
             .child(
                 Button::new("open-accessibility")
@@ -423,9 +426,14 @@ impl AppView {
                     .label(tr!("Open System Settings to grant access"))
                     .on_click(|_, _, cx| request_accessibility(cx)),
             )
-            .child(div().text_caption().text_color(pal.text_muted).child(tr!(
-                "Takes effect automatically once granted — no restart needed."
-            )))
+            .child(
+                div()
+                    .text_caption()
+                    .text_color(pal.text_muted)
+                    .child(gpui::text!(tr!(
+                        "Takes effect automatically once granted — no restart needed."
+                    ))),
+            )
             .child(
                 BaseButton::new("skip-accessibility")
                     .accessibility_label(tr!("Not now (use DPI and other features only)"))
@@ -434,7 +442,9 @@ impl AppView {
                     .cursor_pointer()
                     .hover(|s| s.text_color(pal.text_primary))
                     .focus_visible(|s| s.text_color(pal.text_primary))
-                    .child(tr!("Not now (use DPI and other features only)"))
+                    .child(gpui::text!(tr!(
+                        "Not now (use DPI and other features only)"
+                    )))
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.accessibility_dismissed = true;
                         cx.notify();
@@ -487,7 +497,13 @@ impl Render for AppView {
         // Every frame — including the pre-connection and error frames — hangs
         // off this root, so the window actions (⌘W / ⌘M / zoom) work from the
         // first frame on, not only once the full UI is up.
+        // Named, because it holds keyboard focus whenever nothing inside does:
+        // a focused element with no id and no role made assistive technology
+        // announce the whole window instead of where focus was.
         let root = v_flex()
+            .id("main-window")
+            .role(gpui::accesskit::Role::Group)
+            .aria_label(tr!("OpenRoadie"))
             .size_full()
             .bg(pal.page)
             .text_color(pal.text_primary)

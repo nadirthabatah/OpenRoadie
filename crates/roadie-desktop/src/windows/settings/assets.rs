@@ -9,8 +9,7 @@ use crate::ui::components::control_select;
 use super::{
     App, AppState, AssetCommand, AssetControl, AssetSourcePreference, Entity, IconName, IndexPath,
     InteractiveElement, IntoElement, Palette, ParentElement, SelectItem, SelectState, SettingField,
-    SettingGroup, SettingItem, SettingPage, SettingsView, SharedString, StateEvent, Styled, div,
-    px,
+    SettingGroup, SettingItem, SettingPage, SettingsView, SharedString, StateEvent, Styled, px,
 };
 
 #[derive(Clone)]
@@ -76,31 +75,25 @@ pub(super) fn assets_page(
                 "Automatic uses the first healthy mirror. Choose a source to pin downloads; ROADIE_ASSETS still takes precedence."
             )),
         )
-        .item(
-            SettingItem::new(
-                tr!("Automatically download device images"),
-                SettingField::switch(
-                    |cx| {
-                        AppState::try_read(cx)
-                            .is_none_or(|s| s.app_settings().auto_download_assets)
-                    },
-                    |enabled, cx| {
-                        AppState::update(cx, move |state, cx| {
-                            state.set_auto_download_assets(enabled);
-                            cx.emit(StateEvent::SettingsChanged);
-                        });
-                        // Re-enabling should fetch right away, not wait for the
-                        // next device event.
-                        if enabled {
-                            send_asset_command(cx, AssetCommand::Refresh);
-                        }
-                    },
-                ),
-            )
-            .description(tr!(
+        .item(super::switch_item(
+            "auto-download-assets",
+            tr!("Automatically download device images"),
+            tr!(
                 "Fetch device renders from the selected source when a device connects. When off, OpenRoadie makes no asset network requests; bundled art and the silhouette still show."
-            )),
-        )
+            ),
+            |cx| AppState::try_read(cx).is_none_or(|s| s.app_settings().auto_download_assets),
+            |enabled, cx| {
+                AppState::update(cx, move |state, cx| {
+                    state.set_auto_download_assets(enabled);
+                    cx.emit(StateEvent::SettingsChanged);
+                });
+                // Re-enabling should fetch right away, not wait for the
+                // next device event.
+                if enabled {
+                    send_asset_command(cx, AssetCommand::Refresh);
+                }
+            },
+        ))
         .item(
             SettingItem::new(
                 tr!("Refresh assets"),
@@ -164,11 +157,17 @@ pub(super) fn assets_page(
 fn asset_source_select_field(
     asset_source_select: Entity<SelectState<Vec<AssetSourceOption>>>,
 ) -> impl IntoElement {
-    div().flex_shrink_0().w(px(220.)).h_6().child(
-        control_select(&asset_source_select)
-            .w(px(220.))
-            .menu_width(px(220.)),
-    )
+    // The library select takes no name of its own; a named group gives a
+    // screen reader the setting it belongs to as focus enters it.
+    crate::ui::a11y::group("asset-source", tr!("Asset source"))
+        .flex_shrink_0()
+        .w(px(220.))
+        .h_6()
+        .child(
+            control_select(&asset_source_select)
+                .w(px(220.))
+                .menu_width(px(220.)),
+        )
 }
 
 /// Re-walk the cache and swap the size blurb into the view after `delay`. The

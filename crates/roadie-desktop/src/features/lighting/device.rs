@@ -12,7 +12,7 @@ use gpui::{
 use gpui_base::Button as BaseButton;
 use gpui_component::{
     Selectable as _, h_flex,
-    slider::{Slider, SliderEvent, SliderState},
+    slider::{SliderEvent, SliderState},
     v_flex,
 };
 use roadie_core::color::Rgb;
@@ -132,10 +132,10 @@ impl Render for LightingPanel {
                         div()
                             .text_body()
                             .text_color(pal.text_muted)
-                            .child(tr!("Lighting")),
+                            .child(gpui::text!(tr!("Lighting"))),
                     )
                     .child(
-                        Toggle::new("light-toggle")
+                        Toggle::new("light-toggle", tr!("Lighting"))
                             .selected(lighting.enabled)
                             .on_change(|enabled, _window, cx| {
                                 AppState::update(cx, |state, cx| {
@@ -159,7 +159,7 @@ impl Render for LightingPanel {
                         div()
                             .text_caption()
                             .text_color(pal.text_muted)
-                            .child(tr!("Brightness")),
+                            .child(gpui::text!(tr!("Brightness"))),
                     )
                     .child(
                         div()
@@ -168,7 +168,12 @@ impl Render for LightingPanel {
                             .child(format!("{}%", lighting.brightness)),
                     ),
             )
-            .child(Slider::new(&self.brightness).horizontal())
+            .child(crate::ui::a11y::StateSlider::new(
+                "lighting-brightness-slider",
+                &self.brightness,
+                tr!("Brightness"),
+                |value| gpui::SharedString::from(format!("{value:.0}%")),
+            ))
     }
 }
 

@@ -54,7 +54,11 @@ pub(super) fn action_library(
                     h_flex()
                         .items_center()
                         .justify_between()
-                        .child(div().text_subheading().child(tr!("Actions Ring")))
+                        .child(
+                            div()
+                                .text_subheading()
+                                .child(gpui::text!(tr!("Actions Ring"))),
+                        )
                         .child(
                             Button::new("ring-clear-slot")
                                 .compact()
@@ -115,7 +119,9 @@ fn icon_editor(
     )
     .on_click(move |_, _, cx| commit_icon(slot, None, cx));
 
-    v_flex()
+    crate::ui::a11y::group("ring-icon-editor", tr!("Icon"))
+        .flex()
+        .flex_col()
         .gap_1()
         .child(editor_section(tr!("Icon"), pal))
         .child(
@@ -144,11 +150,17 @@ fn icon_button(
     selected: bool,
     pal: Palette,
 ) -> Button {
+    let label = label.into();
+    // An icon and a tooltip are all a sighted user needs; a screen reader got
+    // neither — every icon here read as "button". The name rides inside, and
+    // the chosen icon is announced as pressed rather than shown only in colour.
     Button::new(id)
         .size(px(32.0))
         .rounded(px(16.0))
         .selected(selected)
+        .toggled(selected)
         .icon(Icon::empty().path(path).text_color(pal.text_muted))
+        .child(crate::ui::a11y::spoken_name("name", label.clone()))
         .tooltip(label)
 }
 
@@ -158,7 +170,9 @@ fn shortcut_editor(
     pal: Palette,
 ) -> impl IntoElement {
     let submit_input = input.clone();
-    v_flex()
+    crate::ui::a11y::group("ring-shortcut-editor", tr!("Custom shortcut"))
+        .flex()
+        .flex_col()
         .gap_1()
         .child(editor_section(tr!("Custom shortcut"), pal))
         .child(
@@ -186,7 +200,9 @@ fn shortcut_editor(
 
 fn path_editor(slot: ActionRingSlot, input: &Entity<InputState>, pal: Palette) -> impl IntoElement {
     let submit_input = input.clone();
-    v_flex()
+    crate::ui::a11y::group("ring-path-editor", tr!("Open application or folder"))
+        .flex()
+        .flex_col()
         .gap_1()
         .child(editor_section(tr!("Open application or folder"), pal))
         .child(
@@ -219,43 +235,49 @@ fn action_sections(
 ) -> impl Iterator<Item = impl IntoElement> {
     let mut index = 0usize;
     ring_catalog().into_iter().map(move |(category, actions)| {
-        v_flex()
-            .child(editor_section(rust_i18n::t!(category.label()), pal))
-            .children(actions.into_iter().map(|action| {
-                let selected = current == Some(&action);
-                let action_to_commit = action.clone();
-                let label = tr!(action.label());
-                let icon_path = action_icon_path(&action);
-                let row_index = index;
-                index += 1;
-                MenuRow::new(("ring-action", row_index))
-                    .role(Role::MenuItem)
-                    .aria_label(label.clone())
-                    .selected(selected)
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                svg()
-                                    .path(icon_path)
-                                    .size_4()
-                                    .flex_none()
-                                    .text_color(pal.text_muted),
-                            )
-                            .child(label),
-                    )
-                    .when(selected, |row| {
-                        row.child(
-                            Icon::new(IconName::Check)
-                                .size_3()
-                                .text_color(rgb(theme::ACCENT_BLUE)),
+        let name: gpui::SharedString = rust_i18n::t!(category.label()).into();
+        crate::ui::a11y::group(
+            gpui::SharedString::from(format!("ring-category-{}", category.label())),
+            name.clone(),
+        )
+        .flex()
+        .flex_col()
+        .child(editor_section(name, pal))
+        .children(actions.into_iter().map(|action| {
+            let selected = current == Some(&action);
+            let action_to_commit = action.clone();
+            let label = tr!(action.label());
+            let icon_path = action_icon_path(&action);
+            let row_index = index;
+            index += 1;
+            MenuRow::new(("ring-action", row_index))
+                .role(Role::MenuItem)
+                .aria_label(label.clone())
+                .selected(selected)
+                .child(
+                    h_flex()
+                        .items_center()
+                        .gap_2()
+                        .child(
+                            svg()
+                                .path(icon_path)
+                                .size_4()
+                                .flex_none()
+                                .text_color(pal.text_muted),
                         )
-                    })
-                    .on_click(move |_, _, cx| {
-                        commit_action(slot, action_to_commit.clone(), cx);
-                    })
-            }))
+                        .child(label),
+                )
+                .when(selected, |row| {
+                    row.child(
+                        Icon::new(IconName::Check)
+                            .size_3()
+                            .text_color(rgb(theme::ACCENT_BLUE)),
+                    )
+                })
+                .on_click(move |_, _, cx| {
+                    commit_action(slot, action_to_commit.clone(), cx);
+                })
+        }))
     })
 }
 

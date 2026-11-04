@@ -850,7 +850,7 @@ fn title_header(key_name: &str, pal: &Palette) -> impl IntoElement {
                 .text_caption()
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(pal.text_muted)
-                .child(tr!("Bind %{name}", name => key_name)),
+                .child(gpui::text!(tr!("Bind %{name}", name => key_name))),
         )
 }
 
@@ -1161,7 +1161,7 @@ fn image_or_fallback(
             .items_center()
             .justify_center()
             .text_color(pal.text_muted)
-            .child(tr!("No keyboard image available"))
+            .child(gpui::text!(tr!("No keyboard image available")))
             .into_any_element(),
     }
 }

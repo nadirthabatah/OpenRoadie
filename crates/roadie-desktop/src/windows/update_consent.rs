@@ -9,7 +9,8 @@
 use crate::ui::theme::Typography as _;
 use gpui::{
     App, Context, FocusHandle, InteractiveElement, IntoElement, ParentElement as _, Render, Size,
-    Styled as _, Subscription, Window, div, prelude::FluentBuilder as _, px,
+    StatefulInteractiveElement as _, Styled as _, Subscription, Window, div,
+    prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
     button::{Button, ButtonVariants as _},
@@ -73,7 +74,19 @@ impl Render for UpdateConsentView {
         theme::apply_ui_scale(window, cx);
         let pal = theme::palette(cx);
 
+        let title = tr!("Check for updates?");
+        let body = tr!(
+            "OpenRoadie can check GitHub once per launch for a new version — query \
+             only, no automatic download or telemetry. You can change this anytime \
+             in Settings."
+        );
+        // A dialog, named and described, so the question and its terms are read
+        // out as the window opens rather than left to be found after the buttons.
         v_flex()
+            .id("update-consent")
+            .role(gpui::accesskit::Role::Dialog)
+            .aria_label(title.clone())
+            .aria_description(body.clone())
             .size_full()
             .bg(pal.page)
             .text_color(pal.text_primary)
@@ -95,22 +108,14 @@ impl Render for UpdateConsentView {
                     .justify_center()
                     .gap_4()
                     .p_6()
-                    .child(
-                        div()
-                            .text_heading()
-                            .child(tr!("Check for updates?")),
-                    )
+                    .child(crate::ui::a11y::heading("title", title, 1).text_heading())
                     .child(
                         div()
                             .max_w(px(320.))
                             .text_body()
                             .text_center()
                             .text_color(pal.text_muted)
-                            .child(tr!(
-                                "OpenRoadie can check GitHub once per launch for a new version — query \
-                                 only, no automatic download or telemetry. You can change this anytime \
-                                 in Settings."
-                            )),
+                            .child(crate::ui::a11y::label("body", body)),
                     )
                     .child(
                         h_flex()

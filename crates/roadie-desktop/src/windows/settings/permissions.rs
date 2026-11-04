@@ -102,7 +102,12 @@ pub(super) fn permissions_page(has_camera: bool) -> SettingPage {
                     PermissionStatus::Granted => None,
                 };
                 if let Some(text) = hint {
-                    field.child(div().text_caption().text_color(pal.text_muted).child(text))
+                    field.child(
+                        div()
+                            .text_caption()
+                            .text_color(pal.text_muted)
+                            .child(gpui::text!(text)),
+                    )
                 } else {
                     field
                 }
