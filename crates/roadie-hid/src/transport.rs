@@ -186,6 +186,15 @@ pub(crate) fn watch_nodes() -> Result<impl Stream<Item = HotplugEvent> + Send + 
 }
 
 pub(crate) async fn enumerate_devices() -> Result<Vec<async_hid::Device>, BackendError> {
+    // A kernel without the hidraw class (WSL, many containers) has no raw HID
+    // nodes at all. The backend reads that directory and reported its absence
+    // as "No such file or directory", which failed every command that lists
+    // devices instead of saying there are none.
+    #[cfg(target_os = "linux")]
+    if !std::path::Path::new("/sys/class/hidraw").exists() {
+        debug!("no /sys/class/hidraw: this kernel exposes no raw HID devices");
+        return Ok(Vec::new());
+    }
     let all: Vec<async_hid::Device> = HID_BACKEND
         .enumerate()
         .await
