@@ -1144,6 +1144,56 @@ keyboard (wpid `4023`, firmware RQK49) and a mouse (wpid `4091`, RQM70).
 - Native on Ubuntu: fmt, the CI Linux test set, non-GUI clippy and the
   shell job all pass.
 
+### 6.15 The screen-reader pass, 2026-11-04
+
+The GUI read through the accessibility tree the way NVDA, Narrator and Orca
+do: UI Automation on Windows, AT-SPI on Linux (WSL2 Ubuntu with WSLg, an
+AT-SPI bus started by hand, and the mock agent under `ROADIE_PROFILE=dev`).
+What was learned, so nobody relearns it:
+
+- **GPUI exposes an element only with both an id and a role.** A plain
+  string child is drawn and never read; `gpui::text!` or `Text::new` makes it
+  readable, `Text::new_inaccessible` draws it without announcing it twice.
+  `ui/a11y.rs` holds the helpers: headings with levels, labels, named
+  groups, a zero-size spoken name for icon-only buttons, and two sliders
+  that take focus, keys and assistive-technology steps.
+- **`aria_selected` on a button removes its Invoke pattern** in AccessKit,
+  so a selected card could not be pressed through UI Automation. Selection
+  on a button is `.toggled()`; the library button's `.selected()` is visual
+  only and says nothing to a screen reader unless `.toggled()` goes with it.
+- **GPUI has no disabled state for assistive technology.** A disabled
+  control simply drops out of the Tab order, so "unavailable" travels in its
+  name ("Invert scroll direction, unavailable").
+- **gpui-component's own pieces are partly unreachable**, and are worked
+  around here rather than patched upstream. The settings sidebar's entries
+  have no role and take no focus, so the Settings window draws its own page
+  tabs and hides the library sidebar with `display: none` (zero width alone
+  left its search field in the Tab order; the search is gone with it). Its
+  `SettingField::switch` has no name, so every settings switch is
+  `settings::switch_item`. Setting titles and descriptions are drawn as
+  text nothing reads, so each control carries its own name and description.
+  The library `Select` cannot be named, so each sits in a named group.
+- **The update-consent dialog** is a dialog with its question as its name
+  and its terms as its description.
+- **A fresh install locked its whole window behind a configuration error.**
+  The GUI writes its first config before its first connect, and a reload
+  with no agent was reported as refused. It is now owed to the next
+  connection (`services/ipc.rs`, `undeliverable`); an agent that never comes
+  is still reported by the unreachable frame.
+- **High contrast.** `themes/high-contrast.json` is a black-and-white pair
+  with yellow (dark) or deep blue (light) for selection. It replaces the
+  chosen themes when Settings, Appearance, High contrast is On, or when the
+  OS asks for it: Windows contrast themes (`SPI_GETHIGHCONTRAST`), GNOME's
+  high-contrast switch or a `HighContrast` GTK theme. macOS Increase
+  Contrast is not read yet. The fixed brand accent (`theme::accent`) still
+  draws selection borders and is pale on the light pair.
+- **Text size.** The interface scale multiplies by Windows' "Make text
+  bigger" and GNOME's text scaling factor, read once at launch.
+- Linux and Windows audits both came back clean on the home window, the
+  desk, the mouse tabs, Settings and Add Device. Not yet tried with a human
+  on NVDA, Narrator or Orca, nor with the Magnifier following focus. The
+  next sitting should do that first.
+
 ## 7. What a session can do with nobody at the desk
 
 Nadir travels, and a session that stalls waiting for a monitor to be plugged in
