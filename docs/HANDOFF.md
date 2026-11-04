@@ -1299,8 +1299,17 @@ person on NVDA or Narrator.
   reads Grid, List, Carousel, each device, the page heading, the tabs and every
   button binding. Opening windows hidden is not needed on macOS (tested).
   `cargo run`'s dev bundle failed there compiling the `.icon` app icon, so the
-  binary was run directly; VoiceOver's own speech was not captured, since
-  automating VoiceOver needs a consent click on that Mac.
+  binary was run directly for the focus checks.
+- **VoiceOver's speech, heard after all:** a ScreenCaptureKit recorder
+  (scratchpad `sck-record.swift`, Terminal already holds Screen & System
+  Audio Recording) captured the speakers, and faster-whisper in WSL
+  transcribed it far better than Windows speech recognition, which mangles
+  fast synthetic speech. With OpenRoadie run as a bundle (a bare binary from
+  Terminal confused VoiceOver) and nothing else in front, VoiceOver read each
+  device, its status and its More options button. Whisper also turned the
+  Narrator desk recording into clean text: both decks and both inputs by name.
+  VoiceOver's own `last phrase` AppleScript needs a root-owned switch file
+  only VoiceOver Utility can create, behind the Mac password.
 
 ## 7. What a session can do with nobody at the desk
 
