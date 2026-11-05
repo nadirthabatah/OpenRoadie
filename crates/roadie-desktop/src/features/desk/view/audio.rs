@@ -62,6 +62,7 @@ impl DeskPanel {
             return;
         };
         let key = WriteKey::AudioInput(id.clone(), input);
+        let done = key.clone();
         let task = cx.spawn(async move |panel, cx| {
             let (reply, answer) = tokio::sync::oneshot::channel();
             if sender
@@ -73,6 +74,7 @@ impl DeskPanel {
                 )))
                 .is_err()
             {
+                Self::finish_write(&panel, &done, cx);
                 return;
             }
             match answer.await {
@@ -99,6 +101,7 @@ impl DeskPanel {
                 }
                 Err(_) => {}
             }
+            Self::finish_write(&panel, &done, cx);
         });
         self.writes.insert(key, task);
     }

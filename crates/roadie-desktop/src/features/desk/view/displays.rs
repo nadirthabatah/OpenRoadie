@@ -27,6 +27,7 @@ impl DeskPanel {
             return;
         };
         let key = WriteKey::Display(id.clone(), control);
+        let done = key.clone();
         let task = cx.spawn(async move |panel, cx| {
             let (reply, answer) = tokio::sync::oneshot::channel();
             if sender
@@ -38,6 +39,7 @@ impl DeskPanel {
                 )))
                 .is_err()
             {
+                Self::finish_write(&panel, &done, cx);
                 return;
             }
             if let Ok(Ok(reading)) = answer.await {
@@ -46,6 +48,7 @@ impl DeskPanel {
                     cx.notify();
                 });
             }
+            Self::finish_write(&panel, &done, cx);
         });
         // Inserting replaces, and dropping the old task cancels it.
         self.writes.insert(key, task);
