@@ -13,6 +13,7 @@
 //! place.
 
 mod audio;
+mod bindings;
 mod camera;
 mod decks;
 mod displays;
@@ -84,6 +85,7 @@ pub fn catalog() -> Value {
     tools.extend(keyboards::tools());
     tools.extend(health::tools());
     tools.extend(layouts::tools());
+    tools.extend(bindings::tools());
     Value::Array(tools)
 }
 
@@ -140,6 +142,11 @@ pub async fn call(params: &Value) -> Result<Value, String> {
         "apply_layout" => layouts::apply_layout(&arguments).await,
         "set_layout_key" => layouts::set_layout_key(&arguments),
         "unset_layout_key" => layouts::unset_layout_key(&arguments),
+        "list_device_keys" => bindings::list_device_keys(),
+        "list_actions" => bindings::list_actions(),
+        "read_button_bindings" => bindings::read_button_bindings(&arguments),
+        "set_button_action" => bindings::set_button_action(&arguments).await,
+        "set_action_ring_slot" => bindings::set_action_ring_slot(&arguments).await,
         other => return Err(format!("unknown tool: {other}")),
     };
     Ok(match outcome {
@@ -214,7 +221,12 @@ mod tests {
     /// The dispatch arms in [`super::call`], as the catalog must advertise
     /// them. Kept here so a tool added to one and not the other fails a test
     /// rather than surfacing as "unknown tool" at run time.
-    const DISPATCHED: [&str; 40] = [
+    const DISPATCHED: [&str; 45] = [
+        "list_device_keys",
+        "list_actions",
+        "read_button_bindings",
+        "set_button_action",
+        "set_action_ring_slot",
         "list_tourboxes",
         "watch_tourbox",
         "list_devices",
