@@ -475,6 +475,10 @@ impl Render for DeskPanel {
                     .child(
                         control_button("desk-refresh")
                             .label(tr!("Refresh"))
+                            .accessibility_label(crate::ui::a11y::maybe_unavailable(
+                                tr!("Refresh"),
+                                scanning,
+                            ))
                             .disabled(scanning)
                             .on_click(cx.listener(|panel, _event, _window, cx| {
                                 panel.refresh(cx);

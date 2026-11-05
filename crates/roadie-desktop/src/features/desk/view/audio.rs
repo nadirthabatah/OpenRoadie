@@ -290,6 +290,7 @@ impl DeskPanel {
             format!("desk-audio-gain-{slug}").into(),
             key,
         ))
+        .accessibility_label(crate::ui::a11y::maybe_unavailable(label.clone(), busy))
         .label(label)
         .disabled(busy)
         .on_click(move |_event, _window: &mut Window, cx: &mut App| {

@@ -77,6 +77,20 @@ pub fn group(id: impl Into<ElementId>, name: impl Into<SharedString>) -> gpui::S
     div().id(id).role(Role::Group).aria_label(name.into())
 }
 
+/// The accessible name of a library button that may be greyed out.
+///
+/// gpui-kit's component `Button` never marks its node disabled (its
+/// `base::Button` does), so one greyed out while a write runs was announced
+/// as usable. Its name says so instead; nothing drawn changes.
+pub fn maybe_unavailable(name: impl Into<SharedString>, disabled: bool) -> SharedString {
+    let name = name.into();
+    if disabled {
+        tr!("%{name}, unavailable", name => name)
+    } else {
+        name
+    }
+}
+
 /// A dropdown's accessible name.
 ///
 /// AccessKit's Linux adapter drops a combo box's text value, so Orca said the

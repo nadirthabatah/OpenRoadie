@@ -111,6 +111,10 @@ fn update_hero(updater: &Entity<Updater>, cx: &mut App) -> gpui::Div {
             _ => Button::new("update-check")
                 .outline()
                 .label(tr!("Check for Updates"))
+                .accessibility_label(crate::ui::a11y::maybe_unavailable(
+                    tr!("Check for Updates"),
+                    busy,
+                ))
                 .on_click(move |_, _, cx| {
                     u.update(cx, Updater::check);
                 }),

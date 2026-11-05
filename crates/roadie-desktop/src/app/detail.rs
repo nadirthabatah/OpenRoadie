@@ -508,18 +508,30 @@ fn wheel_resolution_control(selected: Option<ScrollResolution>, enabled: bool) -
                     Button::new("wheel-resolution-default")
                         .flex_1()
                         .label(tr!("Device default"))
+                        .accessibility_label(crate::ui::a11y::maybe_unavailable(
+                            tr!("Device default"),
+                            !enabled,
+                        ))
                         .selected(selected.is_none()),
                 )
                 .child(
                     Button::new("wheel-resolution-low")
                         .flex_1()
                         .label(tr!("Standard"))
+                        .accessibility_label(crate::ui::a11y::maybe_unavailable(
+                            tr!("Standard"),
+                            !enabled,
+                        ))
                         .selected(selected == Some(ScrollResolution::Low)),
                 )
                 .child(
                     Button::new("wheel-resolution-high")
                         .flex_1()
                         .label(tr!("High resolution"))
+                        .accessibility_label(crate::ui::a11y::maybe_unavailable(
+                            tr!("High resolution"),
+                            !enabled,
+                        ))
                         .selected(selected == Some(ScrollResolution::High)),
                 )
                 .on_click(move |indices, _window, cx| {

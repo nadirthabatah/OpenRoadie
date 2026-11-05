@@ -91,6 +91,7 @@ impl DeskPanel {
         // always another program is holding it, which is a thing a person can
         // do something about — so the sentence matters more than the controls.
         let key = format!("deck-{deck_index}");
+        let writing = self.writes.contains_key(&WriteKey::Deck(deck.id.clone()));
         if !deck.reachable {
             return Self::card(&key, deck.name.clone(), pal)
                 .child(a11y::heading("name", deck.name.clone(), 3).text_body())
@@ -163,7 +164,11 @@ impl DeskPanel {
                     deck_index,
                 ))
                 .label(tr!("Clear the keys"))
-                .disabled(self.writes.contains_key(&WriteKey::Deck(deck.id.clone())))
+                .accessibility_label(crate::ui::a11y::maybe_unavailable(
+                    tr!("Clear the keys"),
+                    writing,
+                ))
+                .disabled(writing)
                 .on_click({
                     let panel = cx.entity().downgrade();
                     let id = deck.id.clone();
