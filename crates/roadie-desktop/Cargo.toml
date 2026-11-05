@@ -95,9 +95,13 @@ OpenRoadie talks to Logitech HID++ mice and keyboards directly — no \
 cloud account, no telemetry, no auto-update poller. Plain TOML config, \
 single binary; device renders are fetched on demand on first launch.
 """
-osx_minimum_system_version = "13.0"
-# Deep-link scheme for the release app. The dev build is hand-bundled, so its
-# dev/Info.plist declares the same scheme separately — keep the two in sync.
-osx_url_schemes = ["roadie"]
 icon = ["icon/AppIcon.icns"]
 resources = ["assets/**/*"]
+
+# cargo-bundle 0.12 moved the macOS keys into their own table and rejects the
+# old top-level `osx_*` spellings, which stopped the DMG build.
+[package.metadata.bundle.osx]
+minimum_system_version = "13.0"
+# Deep-link scheme for the release app. The dev build is hand-bundled, so its
+# dev/Info.plist declares the same scheme separately — keep the two in sync.
+url_schemes = ["roadie"]
