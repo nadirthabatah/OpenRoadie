@@ -33,8 +33,8 @@ mod peripherals;
 use std::collections::BTreeMap;
 
 use gpui::{
-    App, Context, Entity, IntoElement, ParentElement, Render, Styled, Subscription, Task, Window,
-    div, prelude::FluentBuilder as _,
+    App, AsyncApp, Context, Entity, IntoElement, ParentElement, Render, Styled, Subscription, Task,
+    WeakEntity, Window, div, prelude::FluentBuilder as _,
 };
 use gpui_component::{Disableable as _, h_flex, scroll::ScrollableElement as _, v_flex};
 use roadie_ipc::desk::{
@@ -129,6 +129,20 @@ enum WriteKey {
 }
 
 impl DeskPanel {
+    /// Take a finished write out of [`Self::writes`], so the controls it held
+    /// greyed out come back.
+    ///
+    /// Only the write in the slot ever gets here: starting a newer one for the
+    /// same key replaces it, and dropping it cancels it first. Left in place,
+    /// a finished write kept its controls disabled until the window closed —
+    /// one step of gain and both gain buttons were gone.
+    fn finish_write(panel: &WeakEntity<Self>, key: &WriteKey, cx: &mut AsyncApp) {
+        let _ = panel.update(cx, |panel, cx| {
+            panel.writes.remove(key);
+            cx.notify();
+        });
+    }
+
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let title_focus = cx.focus_handle();
         title_focus.focus(window, cx);

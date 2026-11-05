@@ -47,6 +47,7 @@ impl DeskPanel {
         let Some(sender) = AppState::try_read(cx).map(AppState::ipc_sender) else {
             return;
         };
+        let done = key.clone();
         let task = cx.spawn(async move |panel, cx| {
             let (reply, answer) = tokio::sync::oneshot::channel();
             if sender
@@ -55,6 +56,7 @@ impl DeskPanel {
                 )))
                 .is_err()
             {
+                Self::finish_write(&panel, &done, cx);
                 return;
             }
             if let Ok(Ok(updated)) = answer.await {
@@ -63,6 +65,7 @@ impl DeskPanel {
                     cx.notify();
                 });
             }
+            Self::finish_write(&panel, &done, cx);
         });
         self.writes.insert(key, task);
     }
