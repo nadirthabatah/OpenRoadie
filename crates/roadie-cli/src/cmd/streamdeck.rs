@@ -260,6 +260,22 @@ impl StreamDeckCmd {
         let collections = streamdeck::attached()
             .await
             .context("failed to enumerate HID devices")?;
+        // A layout that runs is often started at login, while its deck may be
+        // switched to another computer; it waits rather than giving up.
+        if let Self::Run(args) = &self
+            && !args.exit_on_disconnect
+        {
+            let collections = match choose::narrow(collections, device, &DECKS) {
+                Ok(found) if !found.is_empty() => found,
+                _ => {
+                    println!("The Stream Deck is not attached yet. Waiting for it.");
+                    wait_for_deck(device).await
+                }
+            };
+            return self
+                .dispatch(&collections, parsed, target.as_deref(), device)
+                .await;
+        }
         if collections.is_empty() {
             report_nothing_found().await?;
             return Ok(ExitCode::from(NOTHING_FOUND));
@@ -896,21 +912,34 @@ async fn run_layout(
     device: Option<&str>,
     on_disconnect: OnDisconnect,
 ) -> Result<ExitCode> {
-    apply(collections, file, layout).await?;
-
     let bound: std::collections::BTreeMap<u16, &roadie_core::binding::Action> = layout
         .keys
         .iter()
         .filter_map(|key| key.action.as_ref().map(|action| (key.index, action)))
         .collect();
     if bound.is_empty() {
+        apply(collections, file, layout).await?;
         println!();
         println!("No key in this layout has an action, so there is nothing to run.");
         println!("Add an `action` to a key — `roadie streamdeck example` shows how.");
         return Ok(ExitCode::SUCCESS);
     }
 
-    let mut session = open_preferred(collections).await?;
+    let set_up = match apply(collections, file, layout).await {
+        Ok(_) => open_preferred(collections).await,
+        Err(error) => Err(error),
+    };
+    let mut session = match set_up {
+        Ok(session) => session,
+        // A deck mid-way through a USB switch can be listed and still refuse
+        // to be written; waiting covers that the same way as a later loss.
+        Err(error) if on_disconnect == OnDisconnect::Wait => {
+            println!();
+            println!("The Stream Deck could not be set up ({error:#}). Waiting for it.");
+            reconnect(file, layout, device).await
+        }
+        Err(error) => return Err(error),
+    };
     let model = session.model();
     println!();
     println!(
@@ -935,7 +964,15 @@ async fn run_layout(
                 return Ok(report_loop_ended(model_name, &error, "running this layout"));
             }
             Err(error) => {
-                session = reconnect(model_name, &error, file, layout, device).await;
+                println!();
+                if matches!(error, roadie_hid::backend::BackendError::Disconnected) {
+                    println!("The {model_name} was disconnected. Waiting for it to come back.");
+                } else {
+                    println!(
+                        "The {model_name} stopped answering ({error}). Waiting for it to come back."
+                    );
+                }
+                session = reconnect(file, layout, device).await;
                 continue;
             }
         };
@@ -975,46 +1012,44 @@ async fn run_layout(
 /// How often a deck that went away is looked for again.
 const RECONNECT_POLL: std::time::Duration = std::time::Duration::from_secs(2);
 
-/// The deck went away mid-run: say so, wait for it to come back, put the
-/// layout back on it, and hand back a fresh session.
+/// Wait for the deck to be there and working, put the layout back on it, and
+/// hand back a fresh session. The caller has already said why.
 ///
-/// Any read failure lands here, not only a clean unplug. A deck behind a USB
-/// switch that is switched away and back can surface on Windows as an aborted
-/// read rather than as a disconnect, and the only useful answer to either is
-/// the same: wait, then carry on.
-async fn reconnect(
-    name: &str,
-    error: &roadie_hid::backend::BackendError,
-    file: &Path,
-    layout: &layout::Layout,
-    device: Option<&str>,
-) -> Session {
-    println!();
-    if matches!(error, roadie_hid::backend::BackendError::Disconnected) {
-        println!("The {name} was disconnected. Waiting for it to come back.");
-    } else {
-        println!("The {name} stopped answering ({error}). Waiting for it to come back.");
-    }
+/// Any failure lands here, not only a clean unplug. A deck behind a USB switch
+/// that is switched away and back can surface on Windows as an aborted read,
+/// or refuse a write while it settles, rather than as a disconnect, and the
+/// only useful answer to each is the same: wait, then carry on.
+async fn reconnect(file: &Path, layout: &layout::Layout, device: Option<&str>) -> Session {
     loop {
-        tokio::time::sleep(RECONNECT_POLL).await;
-        let Ok(found) = streamdeck::attached().await else {
-            continue;
-        };
-        let Ok(collections) = choose::narrow(found, device, &DECKS) else {
-            continue;
-        };
-        if collections.is_empty() {
-            continue;
-        }
+        let collections = wait_for_deck(device).await;
         // A deck that was powered off comes back with blank keys, so the
         // layout goes back on before the keys are listened to again.
         if apply(&collections, file, layout).await.is_err() {
             continue;
         }
         if let Ok(session) = open_preferred(&collections).await {
-            println!("The {name} is back; running the layout again.");
+            println!(
+                "The {} is back; running the layout again.",
+                session.model().name
+            );
             println!();
             return session;
+        }
+    }
+}
+
+/// Look for the deck every [`RECONNECT_POLL`] until it is attached, and hand
+/// back its collections.
+async fn wait_for_deck(device: Option<&str>) -> Vec<Attached> {
+    loop {
+        tokio::time::sleep(RECONNECT_POLL).await;
+        let Ok(found) = streamdeck::attached().await else {
+            continue;
+        };
+        if let Ok(collections) = choose::narrow(found, device, &DECKS)
+            && !collections.is_empty()
+        {
+            return collections;
         }
     }
 }
