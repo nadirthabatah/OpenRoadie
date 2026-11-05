@@ -215,7 +215,16 @@ fn arrow(
     Button::new(id)
         .icon(icon)
         // Icon-only, so the name rides inside where a screen reader finds it.
-        .child(crate::ui::a11y::spoken_name("name", name))
+        // The library button never reports itself disabled, so an arrow at the
+        // end of the list says so in its name, the way `Toggle` does.
+        .child(crate::ui::a11y::spoken_name(
+            "name",
+            if disabled {
+                tr!("%{name}, unavailable", name => name)
+            } else {
+                name
+            },
+        ))
         .ghost()
         .with_size(size)
         .disabled(disabled)
