@@ -137,6 +137,23 @@ pub struct RunArgs {
     /// found and where.
     #[arg(long)]
     pub accept_actions: bool,
+    /// Stop when the deck goes away, instead of waiting for it to come back.
+    ///
+    /// By default a deck that is unplugged, or switched to another computer
+    /// through a USB switch, is waited for, and the layout is put back on it
+    /// when it returns. With this the command ends instead, with exit status
+    /// 5, for a script that restarts it itself.
+    #[arg(long)]
+    pub exit_on_disconnect: bool,
+}
+
+/// What `run` does when its deck goes away.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OnDisconnect {
+    /// Wait for the deck and put the layout back on it.
+    Wait,
+    /// End, with [`DISCONNECTED`].
+    Exit,
 }
 
 #[derive(Debug, Args)]
@@ -249,7 +266,8 @@ impl StreamDeckCmd {
         }
         let collections = choose::narrow(collections, device, &DECKS)?;
 
-        self.dispatch(&collections, parsed, target.as_deref()).await
+        self.dispatch(&collections, parsed, target.as_deref(), device)
+            .await
     }
 
     /// The half of the command tree that needs an attached device.
@@ -262,6 +280,7 @@ impl StreamDeckCmd {
         collections: &[Attached],
         parsed: Option<layout::Layout>,
         target: Option<&Path>,
+        device: Option<&str>,
     ) -> Result<ExitCode> {
         match self {
             Self::List => list(collections),
@@ -317,10 +336,15 @@ impl StreamDeckCmd {
                 let path = target.ok_or_else(|| anyhow!("the layout path was not resolved"))?;
                 return apply(collections, path, &layout).await;
             }
-            Self::Run(_) => {
+            Self::Run(args) => {
                 let layout = parsed.ok_or_else(|| anyhow!("the layout was not read"))?;
                 let path = target.ok_or_else(|| anyhow!("the layout path was not resolved"))?;
-                return run_layout(collections, path, &layout).await;
+                let on_disconnect = if args.exit_on_disconnect {
+                    OnDisconnect::Exit
+                } else {
+                    OnDisconnect::Wait
+                };
+                return run_layout(collections, path, &layout, device, on_disconnect).await;
             }
             // Handled before the device scan above.
             Self::Example(_) | Self::Layouts | Self::Set(_) | Self::Unset(_) => {
@@ -869,6 +893,8 @@ async fn run_layout(
     collections: &[Attached],
     file: &Path,
     layout: &layout::Layout,
+    device: Option<&str>,
+    on_disconnect: OnDisconnect,
 ) -> Result<ExitCode> {
     apply(collections, file, layout).await?;
 
@@ -905,7 +931,13 @@ async fn run_layout(
     loop {
         let events = match session.next_events().await {
             Ok(events) => events,
-            Err(error) => return Ok(report_loop_ended(model_name, &error, "running this layout")),
+            Err(error) if on_disconnect == OnDisconnect::Exit => {
+                return Ok(report_loop_ended(model_name, &error, "running this layout"));
+            }
+            Err(error) => {
+                session = reconnect(model_name, &error, file, layout, device).await;
+                continue;
+            }
         };
         for event in events {
             // Act on the press, not the release: a key that fires twice per
@@ -936,6 +968,53 @@ async fn run_layout(
                     "the action worker stopped, so nothing further would run"
                 ));
             }
+        }
+    }
+}
+
+/// How often a deck that went away is looked for again.
+const RECONNECT_POLL: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// The deck went away mid-run: say so, wait for it to come back, put the
+/// layout back on it, and hand back a fresh session.
+///
+/// Any read failure lands here, not only a clean unplug. A deck behind a USB
+/// switch that is switched away and back can surface on Windows as an aborted
+/// read rather than as a disconnect, and the only useful answer to either is
+/// the same: wait, then carry on.
+async fn reconnect(
+    name: &str,
+    error: &roadie_hid::backend::BackendError,
+    file: &Path,
+    layout: &layout::Layout,
+    device: Option<&str>,
+) -> Session {
+    println!();
+    if matches!(error, roadie_hid::backend::BackendError::Disconnected) {
+        println!("The {name} was disconnected. Waiting for it to come back.");
+    } else {
+        println!("The {name} stopped answering ({error}). Waiting for it to come back.");
+    }
+    loop {
+        tokio::time::sleep(RECONNECT_POLL).await;
+        let Ok(found) = streamdeck::attached().await else {
+            continue;
+        };
+        let Ok(collections) = choose::narrow(found, device, &DECKS) else {
+            continue;
+        };
+        if collections.is_empty() {
+            continue;
+        }
+        // A deck that was powered off comes back with blank keys, so the
+        // layout goes back on before the keys are listened to again.
+        if apply(&collections, file, layout).await.is_err() {
+            continue;
+        }
+        if let Ok(session) = open_preferred(&collections).await {
+            println!("The {name} is back; running the layout again.");
+            println!();
+            return session;
         }
     }
 }
