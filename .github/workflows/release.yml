@@ -9,8 +9,11 @@ on:
   # Release, R2 / channels/stable/latest.json, homebrew-tap) is tag-gated
   # below, so a branch dispatch cannot create a release named after the
   # branch, overwrite the updater channel, or ping the tap. Do NOT dispatch
-  # on an existing v* tag — that re-enters the full publish path against an
-  # immutable release.
+  # on an already-released v* tag — that re-enters the full publish path
+  # against an immutable release. Dispatching on a FRESH tag is the sanctioned
+  # first run, not a re-run: without RELEASE_PLZ_TOKEN the release job pushes
+  # the tag with GITHUB_TOKEN, which triggers no workflows, so this dispatch
+  # is how the release actually happens (see release-plz.yml).
   workflow_dispatch:
 
 env:
@@ -24,12 +27,39 @@ env:
   SCCACHE_GHA_RW_MODE: READ_ONLY
 
 jobs:
+  # Signing, notarization, minisign, and the R2 updater channel all hang off
+  # the 1Password service account. When that secret is absent — this fork has
+  # no Apple Developer / R2 provisioning yet — the release degrades on purpose
+  # to unsigned installers on a GitHub Release, instead of failing halfway
+  # with the tag already cut. Provisioning OP_SERVICE_ACCOUNT_TOKEN turns the
+  # full signed path back on with no workflow edit. The check lives in a job
+  # because `secrets` is not readable from a job-level `if` or a reusable
+  # workflow's `with`.
+  preflight:
+    name: Detect signing provisioning
+    runs-on: ubuntu-latest
+    outputs:
+      sign: ${{ steps.provision.outputs.sign }}
+    steps:
+      - name: Check for the 1Password service account
+        id: provision
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+        run: |
+          if [ -n "$OP_SERVICE_ACCOUNT_TOKEN" ]; then
+            echo "sign=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "sign=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # Build (and sign/notarize) every platform's installers. The build matrix
   # lives in a reusable workflow so PRs / manual dispatches can build the same
   # installers UNSIGNED for testing; here we pass sign: true for the signed,
-  # notarized artifacts the publish job ships.
+  # notarized artifacts the publish job ships — unless preflight found the
+  # signing secrets missing, in which case the same artifacts ship unsigned.
   build:
     name: Build installers
+    needs: preflight
     uses: ./.github/workflows/build.yml
     # Required so build.yml can read the 1Password / Azure / R2 signing secrets.
     secrets: inherit
@@ -37,7 +67,7 @@ jobs:
       contents: read
       id-token: write # build.yml mints an OIDC token for Azure Artifact Signing.
     with:
-      sign: true
+      sign: ${{ needs.preflight.outputs.sign == 'true' }}
 
   release-notes:
     name: Generate release notes
@@ -91,7 +121,10 @@ jobs:
           CODEX_ACCESS_TOKEN: ${{ steps.release_notes_config.outputs.CODEX_ACCESS_TOKEN }}
           CHATGPT_USERNAME: ${{ steps.release_notes_config.outputs.CHATGPT_USERNAME }}
           CODEX_ENDPOINT: ${{ steps.release_notes_config.outputs.CODEX_ENDPOINT }}
-          GH_TOKEN: ${{ steps.release_notes_app_token.outputs.token }}
+          # The app token is minted only when 1Password is provisioned
+          # (continue-on-error above); fall back to the workflow token so the
+          # generator's GitHub reads still authenticate on the free path.
+          GH_TOKEN: ${{ steps.release_notes_app_token.outputs.token || github.token }}
         run: |
           set -euo pipefail
           node .github/scripts/release-notes/generate.ts \
@@ -106,7 +139,7 @@ jobs:
   publish:
     name: Publish release
     runs-on: ubuntu-latest
-    needs: [build, release-notes]
+    needs: [preflight, build, release-notes]
     # Wait for the Windows jobs (so the successful .zip/.msi set can be attached)
     # but do NOT let their failure block the macOS release. `!cancelled()` removes
     # the implicit "all needs succeeded" gate, so the required deps are checked
@@ -209,7 +242,13 @@ jobs:
             echo "pacman=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Everything from here to the R2 upload is the updater channel: minisign
+      # signatures and the R2 manifest. It exists only on the provisioned
+      # path — an unprovisioned release ships the GitHub Release alone, and
+      # the gpui-updater simply never learns about versions that were not
+      # published to channels/stable/latest.json.
       - name: Load static updater publishing config from 1Password
+        if: ${{ needs.preflight.outputs.sign == 'true' }}
         id: r2_config
         uses: 1password/load-secrets-action@70062d7a876d3eb6334754fa26efd2fbd90c32f2 # v5.0.1
         with:
@@ -225,6 +264,7 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.OP_R2_SECRET_ITEM }}/CLOUDFLARE_R2_SECRET_ACCESS_KEY
 
       - name: Validate R2 publishing configuration
+        if: ${{ needs.preflight.outputs.sign == 'true' }}
         env:
           ROADIE_UPDATE_BASE_URL: ${{ steps.r2_config.outputs.ROADIE_UPDATE_BASE_URL }}
           ROADIE_UPDATE_MINISIGN_PUBLIC_KEY: ${{ steps.r2_config.outputs.ROADIE_UPDATE_MINISIGN_PUBLIC_KEY }}
@@ -244,11 +284,13 @@ jobs:
           : "${R2_SECRET_ACCESS_KEY:?Configure CLOUDFLARE_R2_SECRET_ACCESS_KEY in the R2 1Password item}"
 
       - name: Install minisign
+        if: ${{ needs.preflight.outputs.sign == 'true' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y minisign
 
       - name: Sign release artifacts with minisign
+        if: ${{ needs.preflight.outputs.sign == 'true' }}
         env:
           ROADIE_UPDATE_MINISIGN_PUBLIC_KEY: ${{ steps.r2_config.outputs.ROADIE_UPDATE_MINISIGN_PUBLIC_KEY }}
           ROADIE_UPDATE_MINISIGN_SECRET_KEY: ${{ steps.r2_config.outputs.ROADIE_UPDATE_MINISIGN_SECRET_KEY }}
@@ -276,6 +318,7 @@ jobs:
           done
 
       - name: Generate static updater manifest
+        if: ${{ needs.preflight.outputs.sign == 'true' }}
         env:
           ROADIE_UPDATE_BASE_URL: ${{ steps.r2_config.outputs.ROADIE_UPDATE_BASE_URL }}
         run: |
@@ -288,6 +331,7 @@ jobs:
             --output dist/latest.json
 
       - name: Upload static updater assets to R2
+        if: ${{ needs.preflight.outputs.sign == 'true' }}
         env:
           AWS_ACCESS_KEY_ID: ${{ steps.r2_config.outputs.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ steps.r2_config.outputs.R2_SECRET_ACCESS_KEY }}
@@ -332,7 +376,7 @@ jobs:
           body_path: .release/RELEASE_NOTES.md
           files: |
             dist/*.dmg
-            dist/*.minisig
+            ${{ needs.preflight.outputs.sign == 'true' && 'dist/*.minisig' || '' }}
             dist/SHA256SUMS
             ${{ steps.artifacts.outputs.zip == 'true' && 'dist/*.zip' || '' }}
             ${{ steps.artifacts.outputs.msi == 'true' && 'dist/*.msi' || '' }}
@@ -344,7 +388,11 @@ jobs:
   homebrew-tap:
     name: Dispatch homebrew-tap update
     runs-on: ubuntu-latest
-    needs: publish
+    needs: [preflight, publish]
+    # Provisioned path only: the tap token is minted through 1Password, and a
+    # tap that points at signed bottles has nothing useful to say about an
+    # unsigned release anyway.
+    if: ${{ needs.preflight.outputs.sign == 'true' }}
     permissions:
       contents: read
     steps:

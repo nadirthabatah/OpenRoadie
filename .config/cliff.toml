@@ -34,7 +34,7 @@ filter_unconventional = true
 require_conventional = true
 split_commits = false
 commit_preprocessors = [
-  { pattern = "\\(#([0-9]+)\\)", replace = "([#${1}](https://github.com/AprilNEA/OpenLogi/pull/${1}))" },
+  { pattern = "\\(#([0-9]+)\\)", replace = "([#${1}](https://github.com/nadirthabatah/OpenRoadie/pull/${1}))" },
 ]
 commit_parsers = [
   { message = "^feat", group = "Added" },

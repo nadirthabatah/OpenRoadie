@@ -36,6 +36,14 @@ changelog_update = false
 # master tip after a failed crates.io publish must not cut v{version} — re-run
 # the failed release job on that same SHA once credentials are fixed.
 release_always = false
+# The crates are not published to crates.io yet: this repo has no
+# CARGO_REGISTRY_TOKEN, and a failed `cargo publish` aborts `release-plz
+# release` before the v{version} tag is cut — which is why no tag has ever
+# existed. Skipping publish keeps the tag (and therefore release.yml) working
+# with no registry account. Delete this line the day the crates.io token is
+# provisioned; the Cargo.toml `publish` fields are untouched, so the crates
+# remain publishable.
+publish = false
 
 [[package]]
 name = "roadie"
