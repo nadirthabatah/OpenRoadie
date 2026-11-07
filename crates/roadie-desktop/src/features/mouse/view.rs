@@ -5,7 +5,7 @@ use gpui::{
     AnyElement, App, AppContext as _, Context, ElementId, Entity, FocusHandle, Focusable, Hsla,
     InteractiveElement, IntoElement, ParentElement, Render, RenderOnce,
     StatefulInteractiveElement as _, Styled, Subscription, Window, canvas, div, hsla, img,
-    prelude::FluentBuilder as _, px, rgb, svg,
+    prelude::FluentBuilder as _, px, svg,
 };
 use gpui_base::Button as BaseButton;
 use gpui_component::{
@@ -29,7 +29,7 @@ use crate::features::profiles::{friendly_app_name, profile_canvas_status};
 use crate::services::assets::{GlowGeometry, ResolvedAsset};
 use crate::state::{AppState, StateEvent};
 use crate::ui::action::localized_action_label;
-use crate::ui::theme::{self, ACCENT_BLUE, Typography as _};
+use crate::ui::theme::{self, Typography as _};
 
 const SIDE_GAP: f32 = 24.;
 const LABEL_W: f32 = 156.;
@@ -126,6 +126,12 @@ pub struct MouseModelView {
     gesture_active_dir: Option<GestureDirection>,
     action_picker_open: bool,
     action_search: Entity<InputState>,
+    /// The inspector's current-action control. Picking a button from the
+    /// keyboard moves focus here, so the next key edits that button rather
+    /// than walking past every other one first.
+    inspector_focus: FocusHandle,
+    /// Set when the action list closes, taken by the next render.
+    refocus_inspector: bool,
     _state_obs: Subscription,
 }
 
@@ -165,6 +171,8 @@ impl MouseModelView {
             gesture_active_dir: None,
             action_picker_open: false,
             action_search,
+            inspector_focus: cx.focus_handle().tab_stop(true),
+            refocus_inspector: false,
             _state_obs: state_obs,
         }
     }
@@ -181,6 +189,9 @@ impl MouseModelView {
     }
 
     pub(super) fn close_action_picker(&mut self) {
+        // The list closing takes the focused row with it; focus goes back to
+        // the control that opened it, as it would from any popup.
+        self.refocus_inspector |= self.action_picker_open;
         self.action_picker_open = false;
     }
 
@@ -228,6 +239,9 @@ fn set_control_hovered(
 
 impl Render for MouseModelView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if std::mem::take(&mut self.refocus_inspector) {
+            self.inspector_focus.focus(window, cx);
+        }
         crate::ui::components::localize_placeholder(
             &self.action_search,
             tr!("Search actions…"),
@@ -300,16 +314,16 @@ impl Render for MouseModelView {
             .child(breathing_art)
             .child(leader_canvas)
             .children(labels_outer.iter().enumerate().map(|(idx, label)| {
-                let binding = binding_label_for_control(label.id, bindings, &gesture_buttons);
-                label_control(
-                    idx,
-                    *label,
-                    binding,
-                    hovered == Some(label.id) || active == Some(label.id),
-                    model,
-                    self.selected == Some(label.id),
-                    &view,
-                )
+                let trigger = LabelTrigger {
+                    id: ("label-trigger", idx).into(),
+                    label: *label,
+                    binding: binding_label_for_control(label.id, bindings, &gesture_buttons),
+                    highlighted: hovered == Some(label.id) || active == Some(label.id),
+                    selected: self.selected == Some(label.id),
+                    view: view.clone(),
+                    inspector_focus: self.inspector_focus.clone(),
+                };
+                label_control(trigger, model)
             }))
             .child(hotspots_layer);
 
@@ -325,6 +339,7 @@ impl Render for MouseModelView {
             },
             &self.action_search,
             &view,
+            &self.inspector_focus,
             cx,
         );
         workspace_layout(canvas, profile_status, inspector, &self.focus_handle)
@@ -337,7 +352,8 @@ fn workspace_layout(
     inspector: impl IntoElement,
     focus_handle: &FocusHandle,
 ) -> impl IntoElement {
-    h_flex()
+    crate::ui::a11y::group("mouse-buttons-panel", tr!("Buttons"))
+        .flex()
         .flex_1()
         .min_h_0()
         .w_full()
@@ -558,27 +574,11 @@ fn hotspots_layer(
 
 /// Position a selectable control card at the label's slot in the side gutter.
 /// Selection updates the fixed inspector; labels never own editor overlays.
-fn label_control(
-    idx: usize,
-    label: Label,
-    binding: BindingLabel,
-    highlighted: bool,
-    model: ModelRect,
-    selected: bool,
-    view: &Entity<MouseModelView>,
-) -> gpui::Div {
+fn label_control(trigger: LabelTrigger, model: ModelRect) -> gpui::Div {
+    let label = trigger.label;
     let x = match label.side {
         Side::Left => model.left - SIDE_GAP - LABEL_W,
         Side::Right => model.left + model.width + SIDE_GAP,
-    };
-    let view = view.clone();
-    let trigger = LabelTrigger {
-        id: ("label-trigger", idx).into(),
-        label,
-        binding,
-        highlighted,
-        selected,
-        view,
     };
     div()
         .absolute()
@@ -604,6 +604,7 @@ struct LabelTrigger {
     highlighted: bool,
     selected: bool,
     view: Entity<MouseModelView>,
+    inspector_focus: FocusHandle,
 }
 
 impl RenderOnce for LabelTrigger {
@@ -615,7 +616,7 @@ impl RenderOnce for LabelTrigger {
         let click_view = view.clone();
         let pal = theme::palette(cx);
         let binding_color = if highlighted {
-            rgb(ACCENT_BLUE).into()
+            theme::accent()
         } else {
             pal.text_primary
         };
@@ -630,7 +631,11 @@ impl RenderOnce for LabelTrigger {
             .selected(selected)
             .accessibility_label(tr!("Bind %{name}", name => button_name.clone()))
             .aria_description(binding_description)
-            .aria_selected(selected)
+            // Pressed while its binding is the one open in the inspector.
+            .aria_toggled(gpui::Toggled::from(selected))
+            // No `aria_selected`: AccessKit treats a selected button as a
+            // selection item, which has no Invoke, so assistive technology could
+            // not press it.
             .flex()
             .flex_col()
             .w(px(LABEL_W))
@@ -641,7 +646,7 @@ impl RenderOnce for LabelTrigger {
             .rounded(pal.control_radius)
             .border_1()
             .border_color(if highlighted {
-                rgb(ACCENT_BLUE).into()
+                theme::accent()
             } else {
                 pal.border
             })
@@ -664,7 +669,7 @@ impl RenderOnce for LabelTrigger {
                 } else {
                     pal.control_hover
                 })
-                .border_color(rgb(ACCENT_BLUE))
+                .border_color(theme::accent())
             })
             // Button name — the caption (xs / muted), the same size as the
             // inspector title and category headers it shares the binding flow with.
@@ -711,15 +716,28 @@ impl RenderOnce for LabelTrigger {
                             .text_color(pal.text_muted),
                     ),
             )
-            .on_click(move |_event, _window, cx| {
-                click_view.update(cx, |this, cx| {
-                    this.select(btn);
-                    cx.notify();
-                });
-            })
+            .on_click(select_on_click(btn, click_view, self.inspector_focus))
             .on_hover(move |hovered, _window, cx| {
                 set_control_hovered(&view, btn, *hovered, cx);
             })
+    }
+}
+
+/// Open `btn` in the inspector. From the keyboard, focus follows it there, so
+/// the next key edits that button rather than walking past every other one.
+fn select_on_click(
+    btn: MouseControlId,
+    view: Entity<MouseModelView>,
+    inspector_focus: FocusHandle,
+) -> impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static {
+    move |event, window, cx| {
+        view.update(cx, |this, cx| {
+            this.select(btn);
+            cx.notify();
+        });
+        if event.is_keyboard() {
+            window.focus(&inspector_focus, cx);
+        }
     }
 }
 
@@ -875,8 +893,13 @@ impl RenderOnce for HotspotTrigger {
 
         BaseButton::new(self.id)
             .selected(selected)
-            .accessibility_label(tr!("Bind %{name}", name => tr!(btn.label())))
-            .aria_selected(selected)
+            // Out of the accessibility tree and the Tab order: each dot is the
+            // same control as the labelled card beside the picture, which names
+            // the button and says what it is bound to. Two of everything doubled
+            // the Tab stops and left a screen reader with no way to tell them
+            // apart. The dot stays for anyone pointing at the picture.
+            .role(gpui_base::RoleOverride::Presentational)
+            .tab_stop(false)
             .flex()
             .items_center()
             .justify_center()
@@ -889,12 +912,12 @@ impl RenderOnce for HotspotTrigger {
                     .rounded_full()
                     .border_1()
                     .border_color(if highlighted {
-                        gpui::Hsla::from(rgb(ACCENT_BLUE))
+                        theme::accent()
                     } else {
                         hsla(0., 0., 0.95, 0.85)
                     })
                     .bg(if highlighted {
-                        gpui::Hsla::from(rgb(ACCENT_BLUE))
+                        theme::accent()
                     } else {
                         hsla(0., 0., 0.18, 0.85)
                     }),
@@ -903,7 +926,7 @@ impl RenderOnce for HotspotTrigger {
                 style
                     .rounded_full()
                     .border_2()
-                    .border_color(rgb(ACCENT_BLUE))
+                    .border_color(theme::accent())
             })
             .on_click(move |_event, _window, cx| {
                 click_view.update(cx, |this, cx| {
@@ -976,6 +999,7 @@ mod tests {
                 },
                 &view.action_search,
                 &entity,
+                &view.inspector_focus,
                 cx,
             );
         });

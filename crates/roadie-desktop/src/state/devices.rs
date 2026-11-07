@@ -205,7 +205,7 @@ pub(super) fn build_device_list(
 
             let display_name = asset
                 .as_ref()
-                .map(|a| a.display_name.clone())
+                .map(|a| a.display_name.trim().to_owned())
                 .or_else(|| paired.codename.as_deref().map(prettify_codename))
                 .unwrap_or_else(|| format!("Slot {}", paired.slot));
             let kind = effective_kind(paired.kind, asset.as_ref().and_then(|a| a.kind));
@@ -376,8 +376,8 @@ fn append_standalone(
             .as_ref()
             .filter(|asset| !asset.display_name.trim().is_empty())
             .map_or_else(
-                || device.display_name.clone(),
-                |asset| asset.display_name.clone(),
+                || device.display_name.trim().to_owned(),
+                |asset| asset.display_name.trim().to_owned(),
             );
         list.push(DeviceRecord {
             config_key,
@@ -573,8 +573,8 @@ fn offline_record(
         .as_ref()
         .filter(|asset| !asset.display_name.trim().is_empty())
         .map_or_else(
-            || identity.display_name.clone(),
-            |asset| asset.display_name.clone(),
+            || identity.display_name.trim().to_owned(),
+            |asset| asset.display_name.trim().to_owned(),
         );
     DeviceRecord {
         config_key: config_key.to_string(),
@@ -807,13 +807,21 @@ pub(super) fn pick_initial_device(list: &[DeviceRecord], saved: Option<&str>) ->
 /// (`"MX Master 3S"`) instead of shouting, while keeping model numbers (tokens
 /// with a digit, e.g. `G513`) and short acronyms (`RGB`, `TKL`, `SE`) as-is.
 /// Codenames already in mixed case are returned unchanged.
+///
+/// Trimmed either way: an MX Master 3S reports `"MX Master 3S "`, and the
+/// trailing space reached a screen reader as a name followed by a pause. And a
+/// few of Logitech's vowel-dropped words are spelled out, because "MX Mchncl"
+/// is unreadable aloud and nothing else on screen says what it means.
 fn prettify_codename(raw: &str) -> String {
+    let raw = raw.trim();
     if raw.chars().any(char::is_lowercase) {
         return raw.to_string();
     }
     raw.split_whitespace()
         .map(|word| {
-            if word.len() <= 3 || word.bytes().any(|b| b.is_ascii_digit()) {
+            if let Some(spelled) = spelled_out(word) {
+                spelled.to_string()
+            } else if word.len() <= 3 || word.bytes().any(|b| b.is_ascii_digit()) {
                 word.to_string()
             } else {
                 let mut chars = word.chars();
@@ -824,6 +832,33 @@ fn prettify_codename(raw: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// The full word for an abbreviation Logitech's firmware uses in a codename,
+/// as the codename spells it. Only words seen on real hardware, so this is a
+/// list of facts rather than a guess at a pattern.
+fn spelled_out(word: &str) -> Option<&'static str> {
+    match word {
+        // MX Mechanical, wpid b366, read over Bolt on 2026-11-03.
+        "MCHNCL" => Some("Mechanical"),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod spoken_name_tests {
+    use super::prettify_codename;
+
+    #[test]
+    fn a_trailing_space_never_reaches_the_name() {
+        assert_eq!(prettify_codename("MX Master 3S "), "MX Master 3S");
+        assert_eq!(prettify_codename("  G513 RGB  "), "G513 RGB");
+    }
+
+    #[test]
+    fn a_vowel_dropped_word_is_spelled_out() {
+        assert_eq!(prettify_codename("MX MCHNCL"), "MX Mechanical");
+    }
 }
 
 #[cfg(test)]
@@ -1302,7 +1337,7 @@ mod tests {
             &Config::default(),
         );
 
-        assert!(list.is_empty());
+        assert_eq!(list.len(), 0);
     }
 
     #[test]
@@ -1355,7 +1390,7 @@ mod tests {
             &HashSet::new(),
             &Config::default(),
         );
-        assert!(list.is_empty());
+        assert_eq!(list.len(), 0);
         append_offline_known(
             &mut list,
             [("receiver:aabb:slot:1", &id)].into_iter(),
@@ -1389,7 +1424,7 @@ mod tests {
             &HashSet::new(),
             &config,
         );
-        assert!(list.is_empty());
+        assert_eq!(list.len(), 0);
 
         append_offline_known(
             &mut list,

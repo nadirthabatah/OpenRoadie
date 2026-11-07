@@ -45,7 +45,7 @@ rust-i18n = "4"
 # The raw, un-negotiated system locale for the diagnostics report; locale
 # *negotiation* lives in roadie-ui.
 sys-locale = "0.3.2"
-gpui-updater = { git = "https://github.com/AprilNEA/gpui-updater", tag = "v0.0.7", features = ["gpui"] }
+gpui-updater = { package = "gpui-updater-pre", version = "0.4.4" }
 # Spawns the agent under its own macOS TCC identity (see ipc_client::spawn_agent).
 disclaim = "0.1"
 url = "2.5.8"
@@ -67,9 +67,14 @@ embed-resource = "3.0.9"
 # menu-bar status item lives in the agent, not here.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { workspace = true }
-objc2-app-kit = { workspace = true, features = ["NSApplication", "NSAppearance"] }
+objc2-app-kit = { workspace = true, features = ["NSAccessibility", "NSApplication", "NSAppearance", "NSWorkspace"] }
 objc2-foundation = { workspace = true, features = ["NSProcessInfo", "NSString", "NSError"] }
 objc2-service-management = { workspace = true, features = ["std", "SMAppService", "SMErrors", "objc2", "objc2-foundation"] }
+accesskit_macos = { workspace = true }
+
+# The OS high-contrast and text-size settings (`platform::os`).
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_System_Registry", "Win32_UI_Accessibility", "Win32_UI_WindowsAndMessaging"] }
 
 [lints]
 workspace = true
@@ -90,9 +95,13 @@ OpenRoadie talks to Logitech HID++ mice and keyboards directly — no \
 cloud account, no telemetry, no auto-update poller. Plain TOML config, \
 single binary; device renders are fetched on demand on first launch.
 """
-osx_minimum_system_version = "13.0"
-# Deep-link scheme for the release app. The dev build is hand-bundled, so its
-# dev/Info.plist declares the same scheme separately — keep the two in sync.
-osx_url_schemes = ["roadie"]
 icon = ["icon/AppIcon.icns"]
 resources = ["assets/**/*"]
+
+# cargo-bundle 0.12 moved the macOS keys into their own table and rejects the
+# old top-level `osx_*` spellings, which stopped the DMG build.
+[package.metadata.bundle.osx]
+minimum_system_version = "13.0"
+# Deep-link scheme for the release app. The dev build is hand-bundled, so its
+# dev/Info.plist declares the same scheme separately — keep the two in sync.
+url_schemes = ["roadie"]

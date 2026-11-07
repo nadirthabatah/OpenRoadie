@@ -3,8 +3,8 @@
 use crate::ui::components::control_select;
 
 use super::{
-    Entity, IndexPath, IntoElement, ParentElement, SelectItem, SelectState, SharedString, Styled,
-    div, px,
+    App, Entity, IndexPath, IntoElement, ParentElement, SelectItem, SelectState, SharedString,
+    Styled, div, px,
 };
 
 #[derive(Clone)]
@@ -69,11 +69,22 @@ pub(super) fn selected_language_index(
 )]
 pub(super) fn language_select_field(
     language_select: Entity<SelectState<Vec<LanguageOption>>>,
-) -> impl IntoElement {
+    cx: &App,
+) -> impl IntoElement + use<> {
+    let current = language_select.read(cx).selected_value().copied();
+    let choice = language_options()
+        .into_iter()
+        .find(|option| Some(option.value) == current)
+        .map(|option| option.title());
     // The Select's root is `size_full`, so pin it to a fixed-size box instead
     // of letting it consume the whole Settings item row.
     div().flex_shrink_0().w(px(220.)).h_6().child(
         control_select(&language_select)
+            // Named for the setting; the select says its own value.
+            .accessibility_label(crate::ui::a11y::select_name(
+                tr!("Interface language"),
+                choice,
+            ))
             .w(px(220.))
             .menu_width(px(220.)),
     )

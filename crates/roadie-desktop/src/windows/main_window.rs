@@ -14,7 +14,7 @@ use tracing::warn;
 
 use crate::app::AppView;
 use crate::ui::theme;
-use crate::windows::{WindowRegistry, titlebar_options};
+use crate::windows::{SHOW_ON_OPEN, WindowRegistry, titlebar_options};
 
 fn window_options(cx: &mut App) -> WindowOptions {
     let bounds = Bounds::centered(None, Size::new(px(1280.), px(820.)), cx);
@@ -35,6 +35,7 @@ fn window_options(cx: &mut App) -> WindowOptions {
         // `TitleBar` (the compositor declines server-side decorations and gpui's
         // fallback is unpainted). macOS/Windows keep their native titlebar.
         titlebar: Some(titlebar_options("OpenRoadie")),
+        show: SHOW_ON_OPEN,
         ..WindowOptions::default()
     }
 }

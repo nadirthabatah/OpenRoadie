@@ -1066,7 +1066,7 @@ fn historical_transient_lighting_is_not_exposed_without_a_live_record() {
         commands,
     );
 
-    assert!(state.devices().is_empty());
+    assert_eq!(state.devices().len(), 0);
     assert!(state.lighting_for(transient_key, transient_key).is_none());
 }
 
@@ -1818,7 +1818,7 @@ fn forgetting_an_offline_device_drops_its_card_and_config_entry() {
 
     assert!(state.forget_device(&record_key));
 
-    assert!(state.devices().is_empty());
+    assert_eq!(state.devices().len(), 0);
     assert!(
         state
             .config

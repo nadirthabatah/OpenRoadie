@@ -1,7 +1,7 @@
 use gpui::{
     App, AppContext as _, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
-    MouseButton, NavigationDirection, ParentElement, Render, Styled, Subscription, Window, div,
-    prelude::FluentBuilder as _, rgb,
+    MouseButton, NavigationDirection, ParentElement, Render, StatefulInteractiveElement as _,
+    Styled, Subscription, Window, div, prelude::FluentBuilder as _, rgb,
 };
 use gpui_base::Button as BaseButton;
 use gpui_component::{
@@ -158,10 +158,32 @@ impl DetailTab {
     }
 }
 
+/// Where focus goes when the main window changes page: the new page's title,
+/// the device name or "Devices". The control that changed the page is gone
+/// and focus with it, which left a screen reader silent and Tab with nowhere
+/// to start.
+struct PageFocus {
+    /// Tracked by the title; not a Tab stop.
+    handle: FocusHandle,
+    /// Set by a route change, taken by the next render, which has the window
+    /// that focusing needs.
+    pending: bool,
+}
+
+impl PageFocus {
+    fn new(cx: &mut App) -> Self {
+        Self {
+            handle: cx.focus_handle().tab_stop(false),
+            pending: false,
+        }
+    }
+}
+
 /// Root application view.
 pub struct AppView {
     focus_handle: FocusHandle,
     route: Route,
+    page_focus: PageFocus,
     mouse_model: Entity<MouseModelView>,
     action_ring_panel: Entity<ActionRingPanel>,
     keyboard_model: Entity<FunctionRowView>,
@@ -292,6 +314,7 @@ impl AppView {
         Self {
             focus_handle,
             route: Route::Home,
+            page_focus: PageFocus::new(cx),
             mouse_model,
             action_ring_panel,
             keyboard_model,
@@ -340,6 +363,7 @@ impl AppView {
             .map(|state| state.read(cx))
             .and_then(AppState::current_record)
             .map_or(DetailTab::Device, DetailTab::default_for);
+        self.page_focus.pending = true;
         cx.notify();
     }
 
@@ -347,6 +371,7 @@ impl AppView {
     /// untouched — the route is purely presentational.
     fn go_home(&mut self, cx: &mut Context<Self>) {
         self.route = Route::Home;
+        self.page_focus.pending = true;
         cx.notify();
     }
 
@@ -356,7 +381,10 @@ impl AppView {
     /// the OS still sees it), and the contextual [`NavigateBack`] action, bound
     /// to Alt+Left (what a rebound BrowserBack action injects on Linux and what
     /// keyboard users expect).
-    fn with_back_navigation(root: gpui::Div, cx: &mut Context<Self>) -> gpui::Div {
+    fn with_back_navigation(
+        root: gpui::Stateful<gpui::Div>,
+        cx: &mut Context<Self>,
+    ) -> gpui::Stateful<gpui::Div> {
         root.on_mouse_down(
             MouseButton::Navigate(NavigationDirection::Back),
             cx.listener(|this, _, _, cx| {
@@ -385,36 +413,36 @@ impl AppView {
             .child(
                 Icon::new(IconName::TriangleAlert)
                     .size_8()
-                    .text_color(rgb(theme::STATUS_CONNECTING)),
+                    .text_color(rgb(theme::status_connecting())),
             )
             .child(
                 div()
                     .text_title()
-                    .child(tr!("Accessibility permission required")),
+                    .child(gpui::text!(tr!("Accessibility permission required"))),
             )
             .child(
                 div()
                     .max_w(ContentWidth::Narrow.rems())
                     .text_body()
                     .text_color(pal.text_muted)
-                    .child(tr!(
+                    .child(gpui::text!(tr!(
                         "OpenRoadie captures mouse buttons (Back / Forward / gesture button) \
                          through the system Accessibility permission and runs the actions you \
                          bind. Features that talk to the device directly — DPI, SmartShift — \
                          are unaffected."
-                    )),
+                    ))),
             )
             .child(
                 div()
                     .max_w(ContentWidth::Narrow.rems())
                     .text_body()
                     .text_color(pal.text_muted)
-                    .child(tr!(
+                    .child(gpui::text!(tr!(
                         "Enable “OpenRoadie Agent” in the Accessibility list — the \
                          background agent owns the mouse hook, not the OpenRoadie app. \
                          If it already shows as enabled, remove the stale entry with \
                          the − button and add it back."
-                    )),
+                    ))),
             )
             .child(
                 Button::new("open-accessibility")
@@ -423,9 +451,14 @@ impl AppView {
                     .label(tr!("Open System Settings to grant access"))
                     .on_click(|_, _, cx| request_accessibility(cx)),
             )
-            .child(div().text_caption().text_color(pal.text_muted).child(tr!(
-                "Takes effect automatically once granted — no restart needed."
-            )))
+            .child(
+                div()
+                    .text_caption()
+                    .text_color(pal.text_muted)
+                    .child(gpui::text!(tr!(
+                        "Takes effect automatically once granted — no restart needed."
+                    ))),
+            )
             .child(
                 BaseButton::new("skip-accessibility")
                     .accessibility_label(tr!("Not now (use DPI and other features only)"))
@@ -434,7 +467,9 @@ impl AppView {
                     .cursor_pointer()
                     .hover(|s| s.text_color(pal.text_primary))
                     .focus_visible(|s| s.text_color(pal.text_primary))
-                    .child(tr!("Not now (use DPI and other features only)"))
+                    .child(gpui::text!(tr!(
+                        "Not now (use DPI and other features only)"
+                    )))
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.accessibility_dismissed = true;
                         cx.notify();
@@ -487,7 +522,13 @@ impl Render for AppView {
         // Every frame — including the pre-connection and error frames — hangs
         // off this root, so the window actions (⌘W / ⌘M / zoom) work from the
         // first frame on, not only once the full UI is up.
+        // Named, because it holds keyboard focus whenever nothing inside does:
+        // a focused element with no id and no role made assistive technology
+        // announce the whole window instead of where focus was.
         let root = v_flex()
+            .id("main-window")
+            .role(gpui::accesskit::Role::Group)
+            .aria_label(tr!("OpenRoadie"))
             .size_full()
             .bg(pal.page)
             .text_color(pal.text_primary)
@@ -565,11 +606,16 @@ impl Render for AppView {
                 .and_then(AppState::current_record)
                 .is_some_and(|record| record.record_key() == *record_key),
         };
-        if !show_device {
+        if !show_device && matches!(self.route, Route::Device { .. }) {
             self.route = Route::Home;
+            self.page_focus.pending = true;
         }
 
         window.set_window_title(&widgets::main_window_title(show_device, cx));
+        if std::mem::take(&mut self.page_focus.pending) {
+            self.page_focus.handle.focus(window, cx);
+        }
+        let page_focus = self.page_focus.handle.clone();
 
         let (header_el, content_el) = if show_device {
             // Resolve the active section once for both the navigation rail and
@@ -602,7 +648,7 @@ impl Render for AppView {
             self.camera_preview
                 .update(cx, |preview, cx| preview.set_target(camera_target, cx));
             (
-                detail::detail_header(record.as_ref(), cx).into_any_element(),
+                detail::detail_header(record.as_ref(), &page_focus, cx).into_any_element(),
                 detail::detail_content(
                     &detail::DetailPanels {
                         mouse_model: &self.mouse_model,
@@ -627,7 +673,7 @@ impl Render for AppView {
             self.camera_preview
                 .update(cx, |preview, cx| preview.set_target(None, cx));
             (
-                home::home_header(cx).into_any_element(),
+                home::home_header(&page_focus, cx).into_any_element(),
                 if has_device {
                     home::device_gallery(cx).into_any_element()
                 } else {

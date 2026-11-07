@@ -407,7 +407,7 @@ mod tests {
         assert!(rx.has_changed().unwrap());
         let snapshot = state.snapshot();
         assert_eq!(snapshot.status.inventory, InventoryHealth::Ready);
-        assert!(snapshot.inventory.is_empty());
+        assert_eq!(snapshot.inventory.len(), 0);
     }
 
     #[test]

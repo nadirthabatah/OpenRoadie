@@ -26,7 +26,7 @@ pub(super) use gpui_component::{
     input::{InputEvent, InputState},
     select::{SelectEvent, SelectItem, SelectState},
     setting::{SelectIndex, SettingField, SettingGroup, SettingItem, SettingPage, Settings},
-    slider::{Slider, SliderEvent, SliderState},
+    slider::{SliderEvent, SliderState},
     tag::Tag,
     theme::ThemeConfig,
     v_flex,
@@ -113,10 +113,15 @@ pub struct SettingsView {
     theme_filter: ThemeFilter,
     /// Free-text filter for the Appearance theme grid (search 50+ themes by name).
     theme_search: Entity<InputState>,
-    /// Page selected when the window first opens. Consumed once by the Settings
-    /// widget's keyed state, so it only steers a fresh open (an already-open
-    /// window is just focused).
-    initial_page: SettingsPage,
+    /// Narrows the page list to pages whose title or settings match.
+    page_search: Entity<InputState>,
+    /// The page on show, as an index into [`settings_pages`]. Starts at the page
+    /// the window was opened on; an already-open window is just focused.
+    page_ix: usize,
+    /// One per page tab, owned here so the chosen tab can be given focus back
+    /// after the page changes; the rebuilt page otherwise left focus on
+    /// nothing, and a screen reader went silent.
+    tab_focus: Vec<FocusHandle>,
     language_select: Entity<SelectState<Vec<language::LanguageOption>>>,
     asset_source_select: Entity<SelectState<Vec<assets::AssetSourceOption>>>,
     thumbwheel_sensitivity_slider: Entity<SliderState>,
@@ -152,6 +157,22 @@ pub struct SettingsView {
 }
 
 impl SettingsView {
+    /// A search field that repaints the window as it is typed in.
+    fn search_input(
+        placeholder: SharedString,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<InputState> {
+        let input = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
+        cx.subscribe(&input, |_, _, event: &InputEvent, cx| {
+            if matches!(event, InputEvent::Change) {
+                cx.notify();
+            }
+        })
+        .detach();
+        input
+    }
+
     fn new(initial_page: SettingsPage, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
         focus_handle.focus(window, cx);
@@ -187,14 +208,8 @@ impl SettingsView {
         });
         let activation_obs = Self::observe_registration_status(window, cx);
 
-        let theme_search =
-            cx.new(|cx| InputState::new(window, cx).placeholder(tr!("Filter themes…")));
-        cx.subscribe(&theme_search, |_, _, event: &InputEvent, cx| {
-            if matches!(event, InputEvent::Change) {
-                cx.notify();
-            }
-        })
-        .detach();
+        let page_search = Self::search_input(tr!("Search settings"), window, cx);
+        let theme_search = Self::search_input(tr!("Filter themes…"), window, cx);
         let current = AppState::try_read(cx).and_then(|s| s.app_settings().language.clone());
         let options = language::language_options();
         let selected = language::selected_language_index(current.as_deref(), &options);
@@ -258,7 +273,9 @@ impl SettingsView {
             _state_obs: state_obs,
             theme_filter: ThemeFilter::All,
             theme_search,
-            initial_page,
+            page_search,
+            page_ix: initial_page.index(),
+            tab_focus: (0..8).map(|_| cx.focus_handle().tab_stop(true)).collect(),
             language_select,
             asset_source_select,
             thumbwheel_sensitivity_slider,
@@ -471,6 +488,12 @@ impl Render for SettingsView {
             window,
             cx,
         );
+        crate::ui::components::localize_placeholder(
+            &self.page_search,
+            tr!("Search settings"),
+            window,
+            cx,
+        );
         let pal = theme::palette(cx);
         let view = cx.entity();
         // Only surface the Camera permission when a webcam is actually present,
@@ -483,11 +506,35 @@ impl Render for SettingsView {
         // Filled group boxes use the theme's content-surface token, keeping
         // settings groups distinct from the page without borrowing a control
         // colour for a large card.
-        let settings = Settings::new("settings")
+        let pages = settings_pages();
+        let query = self.page_search.read(cx).value().trim().to_lowercase();
+        let shown: Vec<usize> = (0..pages.len())
+            .filter(|&ix| query.is_empty() || pages[ix].matches(&query))
+            .collect();
+        // A search that rules the open page out shows its first match instead.
+        let page_ix = self.page_ix.min(pages.len().saturating_sub(1));
+        let page_ix = if shown.is_empty() || shown.contains(&page_ix) {
+            page_ix
+        } else {
+            shown[0]
+        };
+        // The widget's own sidebar is drawn but cannot be focused or read by a
+        // screen reader, so it is collapsed to nothing and [`page_list`] stands
+        // in for it. One widget per page: its selection lives in keyed state
+        // seeded only on creation, so a new page needs a new key.
+        // Display none, not only zero width: a zero-width sidebar still put its
+        // search field and a button, unseen, in the Tab order.
+        let hidden = gpui::StyleRefinement {
+            display: Some(gpui::Display::None),
+            ..gpui::StyleRefinement::default()
+        };
+        let settings = Settings::new(("settings", page_ix))
             .with_group_variant(GroupBoxVariant::Fill)
-            .sidebar_width(px(210.))
+            .sidebar_width(px(0.))
+            .sidebar_size_range(px(0.)..px(0.))
+            .sidebar_style(&hidden)
             .default_selected_index(SelectIndex {
-                page_ix: self.initial_page.index(),
+                page_ix,
                 group_ix: None,
             })
             .page(general::general_page(
@@ -521,7 +568,7 @@ impl Render for SettingsView {
         #[cfg(target_os = "macos")]
         let settings = settings.page(diagnostics::diagnostics_page());
 
-        div()
+        crate::ui::a11y::group("settings-window", tr!("Settings"))
             .size_full()
             .relative()
             .bg(pal.page)
@@ -544,6 +591,240 @@ impl Render for SettingsView {
                         .child(windows::aux_title_bar(tr!("Settings"), cx)),
                 )
             })
-            .child(settings)
+            .child(
+                h_flex()
+                    .size_full()
+                    .items_stretch()
+                    .child(page_list(&pages, &shown, page_ix, &self.page_search, &self.tab_focus, pal, cx))
+                    .child(div().flex_1().min_w_0().h_full().child(settings)),
+            )
     }
+}
+
+/// One page in the page list.
+struct PageEntry {
+    title: SharedString,
+    icon: IconName,
+    /// The titles of the settings on the page, so a search finds the page by
+    /// what is on it. The widget's own search matched these, but it lived in
+    /// the sidebar that cannot be reached; keep this list beside the page.
+    settings: Vec<SharedString>,
+}
+
+impl PageEntry {
+    fn new(title: SharedString, icon: IconName, settings: Vec<SharedString>) -> Self {
+        Self {
+            title,
+            icon,
+            settings,
+        }
+    }
+
+    /// Whether `query`, already lowercased, names the page or a setting on it.
+    fn matches(&self, query: &str) -> bool {
+        std::iter::once(&self.title)
+            .chain(&self.settings)
+            .any(|text| text.to_lowercase().contains(query))
+    }
+}
+
+/// Every page, in the order `render` registers them.
+fn settings_pages() -> Vec<PageEntry> {
+    let mut pages = vec![
+        PageEntry::new(
+            tr!("General"),
+            IconName::Settings,
+            vec![
+                tr!("Smooth scrolling"),
+                tr!("Vertical Scroll Sensitivity"),
+                tr!("Thumb Wheel Sensitivity"),
+                tr!("Launch at login"),
+                tr!("Show in menu bar"),
+                tr!("Show in the notification area"),
+            ],
+        ),
+        PageEntry::new(
+            tr!("Updates"),
+            IconName::ArrowDown,
+            vec![
+                tr!("Check for updates"),
+                tr!("Automatically download and install"),
+                tr!("Update source"),
+                tr!("View changelog"),
+            ],
+        ),
+    ];
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pages.push(PageEntry::new(
+        tr!("Permissions"),
+        IconName::Info,
+        vec![
+            tr!("Accessibility"),
+            tr!("Bluetooth"),
+            tr!("Camera"),
+            tr!("Input device access"),
+            tr!("Input Monitoring"),
+        ],
+    ));
+    pages.extend([
+        PageEntry::new(
+            tr!("Appearance"),
+            IconName::Palette,
+            vec![
+                tr!("Interface language"),
+                tr!("Appearance mode"),
+                tr!("Color theme"),
+                tr!("App icon"),
+                tr!("High contrast"),
+                tr!("Corner radius"),
+                tr!("Interface scale"),
+            ],
+        ),
+        PageEntry::new(
+            tr!("Assets"),
+            IconName::HardDrive,
+            vec![
+                tr!("Asset source"),
+                tr!("Automatically download device images"),
+                tr!("Refresh assets"),
+                tr!("Clear cache"),
+                tr!("Cache location"),
+            ],
+        ),
+        PageEntry::new(
+            tr!("About"),
+            IconName::Info,
+            vec![
+                tr!("Changelog"),
+                tr!("Documentation"),
+                tr!("Report an issue"),
+                tr!("Copy Diagnostics"),
+            ],
+        ),
+    ]);
+    #[cfg(target_os = "macos")]
+    pages.push(PageEntry::new(
+        tr!("Diagnostics"),
+        IconName::Info,
+        vec![tr!("Input interception")],
+    ));
+    pages
+}
+
+/// The page list: a search field, then one tab per page that matches it,
+/// reachable with Tab and announced as "General, tab, selected, 1 of 6".
+fn page_list(
+    pages: &[PageEntry],
+    shown: &[usize],
+    active: usize,
+    search: &Entity<InputState>,
+    tab_focus: &[FocusHandle],
+    pal: Palette,
+    cx: &mut Context<SettingsView>,
+) -> impl IntoElement {
+    v_flex()
+        .w(px(210.))
+        .h_full()
+        .flex_shrink_0()
+        .gap_2()
+        .p_3()
+        .border_r_1()
+        .border_color(pal.border)
+        .child(crate::ui::components::control_input(search).cleanable(true))
+        .when(shown.is_empty(), |list| {
+            list.child(
+                div()
+                    .px_3()
+                    .text_color(pal.text_muted)
+                    .child(gpui::text!(tr!("No settings match"))),
+            )
+        })
+        .child(page_tabs(pages, shown, active, tab_focus, pal, cx))
+}
+
+/// The tabs of [`page_list`], for the pages in `shown`.
+fn page_tabs(
+    pages: &[PageEntry],
+    shown: &[usize],
+    active: usize,
+    tab_focus: &[FocusHandle],
+    pal: Palette,
+    cx: &mut Context<SettingsView>,
+) -> impl IntoElement {
+    v_flex()
+        .id("settings-pages")
+        .role(gpui::Role::TabList)
+        .aria_label(tr!("Settings"))
+        .gap_1()
+        .children(
+            shown
+                .iter()
+                .map(|&ix| (ix, pages[ix].title.clone(), pages[ix].icon.clone()))
+                .map(|(ix, title, icon)| {
+                    let selected = ix == active;
+                    gpui_base::Button::new(("settings-page", ix))
+                        .when_some(tab_focus.get(ix), gpui_base::Button::track_focus)
+                        .role(gpui::Role::Tab)
+                        .selected(selected)
+                        .accessibility_label(title.clone())
+                        .aria_selected(selected)
+                        .w_full()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .px_3()
+                        .py_1p5()
+                        .rounded(pal.control_radius)
+                        .cursor_pointer()
+                        .text_color(if selected {
+                            pal.text_primary
+                        } else {
+                            pal.text_muted
+                        })
+                        .when(selected, |row| row.bg(theme::accent_tint()))
+                        .hover(move |row| row.bg(pal.control_hover))
+                        .focus_visible(move |row| row.border_1().border_color(pal.text_primary))
+                        .child(Icon::new(icon).size_4().flex_none())
+                        .child(title)
+                        .on_click(cx.listener(move |view, _, window, cx| {
+                            view.page_ix = ix;
+                            if let Some(focus) = view.tab_focus.get(ix).cloned() {
+                                cx.on_next_frame(window, move |_, window, cx| {
+                                    focus.focus(window, cx);
+                                });
+                            }
+                            cx.notify();
+                        }))
+                }),
+        )
+}
+
+/// A setting row with an on/off switch, named and described for assistive
+/// technology.
+///
+/// The widget's own `SettingField::switch` draws a switch with no name, so a
+/// screen reader heard "switch, on" and nothing more; the row's title beside
+/// it is drawn as text no screen reader reaches. This switch is called by the
+/// setting's title and carries its description.
+pub(super) fn switch_item(
+    id: &'static str,
+    title: SharedString,
+    description: SharedString,
+    value: impl Fn(&App) -> bool + 'static,
+    set_value: impl Fn(bool, &mut App) + 'static,
+) -> SettingItem {
+    let set_value = Rc::new(set_value);
+    let (name, spoken) = (title.clone(), description.clone());
+    SettingItem::new(
+        title,
+        SettingField::render(move |options, _, cx| {
+            let set_value = set_value.clone();
+            crate::ui::components::Toggle::new(id, name.clone())
+                .description(spoken.clone())
+                .selected(value(cx))
+                .disabled(options.is_disabled())
+                .on_change(move |on, _, cx| set_value(*on, cx))
+        }),
+    )
+    .description(description)
 }

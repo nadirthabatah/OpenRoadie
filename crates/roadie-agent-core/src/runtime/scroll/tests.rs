@@ -187,7 +187,7 @@ fn synthetic_opposing_impulses_cancel_before_output() {
         frames.push(frame);
     });
 
-    assert!(frames.is_empty());
+    assert_eq!(frames.len(), 0);
     assert!(engine.active.is_empty());
 }
 
@@ -211,7 +211,7 @@ fn cancellation_emits_one_terminal_phase_only_after_output_began() {
         frames.push(frame);
     });
     engine.cancel_all(&mut |frame| frames.push(frame));
-    assert!(frames.is_empty());
+    assert_eq!(frames.len(), 0);
 
     engine.impulse(source(), wheel(1.0, 0.0), base, &mut |frame| {
         frames.push(frame);

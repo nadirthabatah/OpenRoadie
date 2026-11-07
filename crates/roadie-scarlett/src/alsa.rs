@@ -293,7 +293,10 @@ mod tests {
         let gen2 = model(0x8203);
         assert_eq!(count(gen2, Control::PhantomPower), 0);
         assert_eq!(name(gen2, Control::PhantomPower, 0), None);
-        assert!(names(gen2, Control::PhantomPower).is_empty());
+        assert_eq!(
+            names(gen2, Control::PhantomPower),
+            [] as [std::string::String; 0]
+        );
     }
 
     #[test]

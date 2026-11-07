@@ -36,6 +36,7 @@
 pub mod mock;
 pub mod session;
 pub mod transport;
+pub mod windows_setup;
 
 pub use session::{Session, Settings, Snapshot};
 pub use transport::{Attached, Transport, attached};
@@ -80,6 +81,20 @@ pub enum ControlError {
         name: String,
         /// What the platform reported.
         reason: String,
+    },
+
+    /// Windows bound its own WinUSB driver to the control interface but never
+    /// published a path to open it, because the device names no interface
+    /// GUID. Nothing is holding it; Windows simply has not finished.
+    /// [`windows_setup`] supplies the GUID, which is the one-time fix.
+    #[error(
+        "Windows has not finished setting up the control interface of {name}. Nothing else \
+         is holding it, and no Focusrite software is needed. Run this once, and accept the \
+         Windows permission prompt it raises: roadie audio prepare"
+    )]
+    WindowsUnpublished {
+        /// Which interface.
+        name: String,
     },
 
     /// A transfer failed.

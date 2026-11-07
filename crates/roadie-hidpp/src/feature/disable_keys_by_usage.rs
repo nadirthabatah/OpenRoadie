@@ -95,7 +95,7 @@ mod tests {
 
     #[test]
     fn empty_usage_list_sends_no_packets() {
-        assert!(usage_packets(&[]).is_empty());
+        assert_eq!(usage_packets(&[]), [] as [[u8; 16]; 0]);
     }
 
     #[test]

@@ -115,7 +115,7 @@ fn profile_scope_content(shell: ProfileScopeShell, pal: Palette) -> impl IntoEle
                 .flex_none()
                 .text_body()
                 .text_color(pal.text_muted)
-                .child(tr!("Profile")),
+                .child(gpui::text!(tr!("Profile"))),
         )
         .child(
             h_flex()
@@ -273,7 +273,7 @@ fn profile_options_popover(
                                 .items_center()
                                 .gap_2()
                                 .child(Icon::new(IconName::Close).size_4())
-                                .child(tr!("Remove profile…")),
+                                .child(gpui::text!(tr!("Remove profile…"))),
                         )
                         .on_click(move |_event, window, cx| {
                             if let Some(popover) = popover.upgrade() {

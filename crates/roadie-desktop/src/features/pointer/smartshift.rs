@@ -15,13 +15,13 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, AppContext as _, Context, Entity, IntoElement, ParentElement, Render,
-    SharedString, Styled, Subscription, Window, div, px, rgb,
+    SharedString, Styled, Subscription, Window, div, px,
 };
 use gpui_component::{
     Disableable as _, Selectable as _,
     button::Button,
     h_flex,
-    slider::{Slider, SliderEvent, SliderState},
+    slider::{SliderEvent, SliderState},
     v_flex,
 };
 use roadie_core::config::{
@@ -35,7 +35,7 @@ use crate::state::{AppState, DeviceKey, SmartShiftLoad, SmartShiftWriteStatus, S
 use crate::ui::components::Toggle;
 use crate::ui::section::section_label;
 use crate::ui::status::{retry_line, status_line};
-use crate::ui::theme::{self, ACCENT_BLUE, Palette, Typography as _};
+use crate::ui::theme::{self, Palette, Typography as _};
 
 /// Friendly slider range for the `autoDisengage` threshold. The wire field is
 /// `0x01`–`0xFE` (0.25 turn/s steps); the slider exposes the usable band
@@ -233,7 +233,7 @@ impl SmartShiftPanel {
             );
 
         let value_color = if sensitivity_enabled {
-            rgb(ACCENT_BLUE).into()
+            theme::accent()
         } else {
             pal.text_muted
         };
@@ -252,12 +252,23 @@ impl SmartShiftPanel {
                     ),
             )
             .when(sensitivity_enabled, |row| {
-                row.child(Slider::new(&self.threshold).horizontal())
+                let spoken = gpui::SharedString::from(format!("{display}"));
+                row.child(crate::ui::a11y::StateSlider::new(
+                    "smartshift-threshold-slider",
+                    &self.threshold,
+                    tr!("Sensitivity"),
+                    move |_| spoken.clone(),
+                ))
             })
             .when(!sensitivity_enabled, |row| row.child(disabled_track(pal)))
-            .child(div().text_caption().text_color(pal.text_muted).child(tr!(
-                "Higher keeps the ratchet engaged longer before free-spin."
-            )));
+            .child(
+                div()
+                    .text_caption()
+                    .text_color(pal.text_muted)
+                    .child(gpui::text!(tr!(
+                        "Higher keeps the ratchet engaged longer before free-spin."
+                    ))),
+            );
 
         let wheel_row = self.wheel_sensitivity_row(window, cx);
 
@@ -303,11 +314,19 @@ impl SmartShiftPanel {
                     .child(
                         div()
                             .text_body()
-                            .text_color(rgb(ACCENT_BLUE))
+                            .text_color(theme::accent())
                             .child(format!("{display}")),
                     ),
             )
-            .child(Slider::new(&self.wheel_sensitivity).horizontal())
+            .child({
+                let spoken = gpui::SharedString::from(format!("{display}"));
+                crate::ui::a11y::StateSlider::new(
+                    "thumbwheel-sensitivity-slider",
+                    &self.wheel_sensitivity,
+                    tr!("Thumb Wheel Sensitivity"),
+                    move |_| spoken.clone(),
+                )
+            })
     }
 }
 
@@ -407,11 +426,11 @@ fn permanent_row(
                     div()
                         .text_caption()
                         .text_color(pal.text_muted)
-                        .child(tr!("Never auto-switch to free-spin.")),
+                        .child(gpui::text!(tr!("Never auto-switch to free-spin."))),
                 ),
         )
         .child(
-            Toggle::new("smartshift-permanent")
+            Toggle::new("smartshift-permanent", tr!("Permanent ratchet"))
                 .selected(permanent)
                 .disabled(!ratchet)
                 .on_change(move |permanent, _window, cx| {
@@ -443,6 +462,7 @@ fn mode_pill(label: SharedString, selected: bool, status: SmartShiftStatus) -> i
         .compact()
         .label(label)
         .selected(selected)
+        .toggled(selected)
         .on_click(move |_event, _window, cx| {
             AppState::update_smartshift(cx, status);
         })

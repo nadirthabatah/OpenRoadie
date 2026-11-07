@@ -370,8 +370,8 @@ mod tests {
 
     #[test]
     fn a_clean_profile_has_nothing_to_report() {
-        assert!(audit(&Config::default()).expect("serializes").is_empty());
-        assert!(audit_with(Action::Copy).is_empty());
+        assert_eq!(audit(&Config::default()).expect("serializes").len(), 0);
+        assert_eq!(audit_with(Action::Copy).len(), 0);
     }
 
     #[test]
@@ -461,7 +461,7 @@ mod tests {
     fn inspecting_a_clean_profile_reports_nothing() {
         let (_dir, path) = round_trip(&Config::default());
         let (_config, findings) = super::inspect(&path).expect("a valid profile");
-        assert!(findings.is_empty());
+        assert_eq!(findings.len(), 0);
     }
 
     #[test]
@@ -608,7 +608,7 @@ mod tests {
         let mut config = Config::default();
         let raw = serde_json::to_value(&config).expect("serializes");
         // Confirm the baseline is clean before planting anything.
-        assert!(audit(&config).expect("serializes").is_empty());
+        assert_eq!(audit(&config).expect("serializes").len(), 0);
         drop(raw);
 
         config.set_keyboard_binding(

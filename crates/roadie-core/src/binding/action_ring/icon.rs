@@ -241,7 +241,8 @@ impl ActionRingIcon {
         Self::Ban,
     ];
 
-    /// Existing localization key used as this icon's accessible label.
+    /// Localization key used as this icon's accessible label, unique among
+    /// [`Self::ALL`].
     #[must_use]
     pub fn label(self) -> &'static str {
         match self {
@@ -265,8 +266,12 @@ impl ActionRingIcon {
             Self::Refresh => "Toggle SmartShift",
             Self::ArrowUp => "Scroll Up",
             Self::ArrowDown => "Scroll Down",
-            Self::ArrowLeft | Self::ScrollLeft => "Scroll Left",
-            Self::ArrowRight | Self::ScrollRight => "Scroll Right",
+            // The plain arrows sit beside the scroll arrows in one picker, so
+            // they need names of their own.
+            Self::ArrowLeft => "Left arrow",
+            Self::ArrowRight => "Right arrow",
+            Self::ScrollLeft => "Scroll Left",
+            Self::ScrollRight => "Scroll Right",
             Self::Undo => "Undo",
             Self::Redo => "Redo",
             Self::SelectAll => "Select All",
@@ -327,3 +332,22 @@ macro_rules! derive_action_icon {
 }
 
 super::super::action::for_each_unit_action!(derive_action_icon);
+
+#[cfg(test)]
+mod tests {
+    use super::ActionRingIcon;
+
+    #[test]
+    fn every_icon_has_a_name_of_its_own() {
+        // The icon picker is read by name alone; two icons sharing one were
+        // indistinguishable to a screen reader.
+        let mut labels: Vec<_> = ActionRingIcon::ALL
+            .iter()
+            .map(|icon| icon.label())
+            .collect();
+        labels.sort_unstable();
+        let before = labels.len();
+        labels.dedup();
+        assert_eq!(labels.len(), before, "two icons share an accessible name");
+    }
+}

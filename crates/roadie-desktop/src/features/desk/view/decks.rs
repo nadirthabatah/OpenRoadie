@@ -24,6 +24,7 @@ use roadie_ipc::desk::{StreamDeckChange, StreamDeckSummary};
 use super::{DeskPanel, WriteKey};
 use crate::services::ipc::{Command, DeskCommand};
 use crate::state::AppState;
+use crate::ui::a11y;
 use crate::ui::components::control_button;
 use crate::ui::theme::{Palette, Typography as _};
 
@@ -46,6 +47,7 @@ impl DeskPanel {
             return;
         };
         let key = WriteKey::Deck(id.clone());
+        let done = key.clone();
         let task = cx.spawn(async move |panel, cx| {
             let (reply, answer) = tokio::sync::oneshot::channel();
             if sender
@@ -56,6 +58,7 @@ impl DeskPanel {
                 )))
                 .is_err()
             {
+                Self::finish_write(&panel, &done, cx);
                 return;
             }
             match answer.await {
@@ -74,6 +77,7 @@ impl DeskPanel {
                 }
                 Err(_) => {}
             }
+            Self::finish_write(&panel, &done, cx);
         });
         self.writes.insert(key, task);
     }
@@ -89,11 +93,13 @@ impl DeskPanel {
         // A deck that would not open gets its name and the reason. Almost
         // always another program is holding it, which is a thing a person can
         // do something about — so the sentence matters more than the controls.
+        let key = format!("deck-{deck_index}");
+        let writing = self.writes.contains_key(&WriteKey::Deck(deck.id.clone()));
         if !deck.reachable {
-            return Self::card(pal)
-                .child(div().text_body().child(deck.name.clone()))
+            return Self::card(&key, deck.name.clone(), pal)
+                .child(a11y::heading("name", deck.name.clone(), 3).text_body())
                 .when_some(deck.unreachable_reason.clone(), |card, why| {
-                    card.child(div().text_caption().text_color(pal.text_muted).child(why))
+                    card.child(Self::caption("unreachable", why, pal))
                 })
                 .into_any_element();
         }
@@ -108,42 +114,52 @@ impl DeskPanel {
             tr!("%{keys} keys", keys = deck.keys)
         };
 
-        Self::card(pal)
+        Self::card(&key, deck.name.clone(), pal)
             .child(self.card_heading(&deck.id, &deck.name, pal))
+            .child(Self::caption("describe", describe, pal))
             .child(
-                div()
-                    .text_caption()
-                    .text_color(pal.text_muted)
-                    .child(describe),
-            )
-            .child(div().text_caption().child(tr!("Screen brightness")))
-            .child(
-                h_flex()
-                    .gap_2()
-                    .child(Self::brightness_button(
-                        deck,
-                        deck_index,
-                        "full",
-                        tr!("Full brightness"),
-                        FULL,
-                        cx,
-                    ))
-                    .child(Self::brightness_button(
-                        deck,
-                        deck_index,
-                        "dim",
-                        tr!("Dim"),
-                        DIM,
-                        cx,
-                    ))
-                    .child(Self::brightness_button(
-                        deck,
-                        deck_index,
-                        "off",
-                        tr!("Off"),
-                        OFF,
-                        cx,
-                    )),
+                // Says the deck too: Narrator names only the innermost group it enters,
+                // so two decks' "Screen brightness" could not be told apart.
+                a11y::group(
+                    "brightness",
+                    format!("{}, {}", deck.name, tr!("Screen brightness")),
+                )
+                .flex()
+                .flex_col()
+                .gap_2()
+                .child(
+                    div()
+                        .text_caption()
+                        .child(gpui::Text::new_inaccessible(tr!("Screen brightness"))),
+                )
+                .child(
+                    h_flex()
+                        .gap_2()
+                        .child(Self::brightness_button(
+                            deck,
+                            deck_index,
+                            "full",
+                            tr!("Full brightness"),
+                            FULL,
+                            cx,
+                        ))
+                        .child(Self::brightness_button(
+                            deck,
+                            deck_index,
+                            "dim",
+                            tr!("Dim"),
+                            DIM,
+                            cx,
+                        ))
+                        .child(Self::brightness_button(
+                            deck,
+                            deck_index,
+                            "off",
+                            tr!("Off"),
+                            OFF,
+                            cx,
+                        )),
+                ),
             )
             .child(
                 control_button(ElementId::NamedInteger(
@@ -151,7 +167,11 @@ impl DeskPanel {
                     deck_index,
                 ))
                 .label(tr!("Clear the keys"))
-                .disabled(self.writes.contains_key(&WriteKey::Deck(deck.id.clone())))
+                .accessibility_label(crate::ui::a11y::maybe_unavailable(
+                    tr!("Clear the keys"),
+                    writing,
+                ))
+                .disabled(writing)
                 .on_click({
                     let panel = cx.entity().downgrade();
                     let id = deck.id.clone();

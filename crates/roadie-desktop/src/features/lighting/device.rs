@@ -12,7 +12,7 @@ use gpui::{
 use gpui_base::Button as BaseButton;
 use gpui_component::{
     Selectable as _, h_flex,
-    slider::{Slider, SliderEvent, SliderState},
+    slider::{SliderEvent, SliderState},
     v_flex,
 };
 use roadie_core::color::Rgb;
@@ -25,17 +25,18 @@ use crate::ui::theme::{self, Palette, Typography as _};
 const SWATCH: f32 = 28.;
 
 /// Preset colors. Deliberately small — covering the common keyboard accent
-/// colors.
-const PALETTE: &[Rgb] = &[
-    Rgb::new(0xff, 0x3b, 0x30),
-    Rgb::new(0xff, 0x95, 0x00),
-    Rgb::new(0xff, 0xcc, 0x00),
-    Rgb::new(0x34, 0xc7, 0x59),
-    Rgb::new(0x00, 0xc7, 0xbe),
-    Rgb::new(0x00, 0x7a, 0xff),
-    Rgb::new(0x58, 0x56, 0xd6),
-    Rgb::new(0xaf, 0x52, 0xde),
-    Rgb::WHITE,
+/// colors. Each carries the name a screen reader says for it: a hex code
+/// tells a listener nothing.
+const PALETTE: &[(Rgb, &str)] = &[
+    (Rgb::new(0xff, 0x3b, 0x30), "Red"),
+    (Rgb::new(0xff, 0x95, 0x00), "Orange"),
+    (Rgb::new(0xff, 0xcc, 0x00), "Yellow"),
+    (Rgb::new(0x34, 0xc7, 0x59), "Green"),
+    (Rgb::new(0x00, 0xc7, 0xbe), "Teal"),
+    (Rgb::new(0x00, 0x7a, 0xff), "Blue"),
+    (Rgb::new(0x58, 0x56, 0xd6), "Indigo"),
+    (Rgb::new(0xaf, 0x52, 0xde), "Purple"),
+    (Rgb::WHITE, "White"),
 ];
 
 pub struct LightingPanel {
@@ -118,7 +119,7 @@ impl Render for LightingPanel {
 
         let swatches: Vec<_> = PALETTE
             .iter()
-            .map(|&color| swatch(color, &lighting, pal))
+            .map(|&(color, name)| swatch(color, rust_i18n::t!(name).into(), &lighting, pal))
             .collect();
 
         v_flex()
@@ -132,10 +133,10 @@ impl Render for LightingPanel {
                         div()
                             .text_body()
                             .text_color(pal.text_muted)
-                            .child(tr!("Lighting")),
+                            .child(gpui::text!(tr!("Lighting"))),
                     )
                     .child(
-                        Toggle::new("light-toggle")
+                        Toggle::new("light-toggle", tr!("Lighting"))
                             .selected(lighting.enabled)
                             .on_change(|enabled, _window, cx| {
                                 AppState::update(cx, |state, cx| {
@@ -150,7 +151,15 @@ impl Render for LightingPanel {
                             }),
                     ),
             )
-            .child(h_flex().gap_2().flex_wrap().children(swatches))
+            .child(
+                // Named, so the swatches read as one choice ("Color") and not
+                // as loose buttons each announced under the window.
+                crate::ui::a11y::group("lighting-colors", tr!("Color"))
+                    .flex()
+                    .gap_2()
+                    .flex_wrap()
+                    .children(swatches),
+            )
             .child(
                 h_flex()
                     .justify_between()
@@ -159,7 +168,7 @@ impl Render for LightingPanel {
                         div()
                             .text_caption()
                             .text_color(pal.text_muted)
-                            .child(tr!("Brightness")),
+                            .child(gpui::text!(tr!("Brightness"))),
                     )
                     .child(
                         div()
@@ -168,17 +177,27 @@ impl Render for LightingPanel {
                             .child(format!("{}%", lighting.brightness)),
                     ),
             )
-            .child(Slider::new(&self.brightness).horizontal())
+            .child(crate::ui::a11y::StateSlider::new(
+                "lighting-brightness-slider",
+                &self.brightness,
+                tr!("Brightness"),
+                |value| gpui::SharedString::from(format!("{value:.0}%")),
+            ))
     }
 }
 
 /// One color swatch. Clicking it turns lighting on and sets that color.
-fn swatch(color: Rgb, current: &Lighting, pal: Palette) -> impl IntoElement {
+fn swatch(
+    color: Rgb,
+    name: gpui::SharedString,
+    current: &Lighting,
+    pal: Palette,
+) -> impl IntoElement {
     let selected = current.enabled && current.color == color;
     BaseButton::new(("light-swatch", color.packed()))
         .role(Role::RadioButton)
         .selected(selected)
-        .accessibility_label(format!("{} #{:06X}", tr!("Lighting"), color.packed()))
+        .accessibility_label(name)
         .aria_toggled(if selected {
             Toggled::True
         } else {

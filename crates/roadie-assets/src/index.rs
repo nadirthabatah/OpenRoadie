@@ -332,7 +332,7 @@ mod tests {
         }"#;
         let index: Index = serde_json::from_str(json).expect("parse legacy index");
         let entry = &index.devices["mx_master_3s"];
-        assert!(entry.model_ids.is_empty());
+        assert_eq!(entry.model_ids, [] as [std::string::String; 0]);
         assert_eq!(entry.model_id_candidates().collect::<Vec<_>>(), ["2b043"]);
     }
 

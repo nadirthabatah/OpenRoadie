@@ -3,8 +3,8 @@
 use super::{AppState, StateEvent};
 use gpui::Context;
 use roadie_core::config::{
-    AppIcon, AppSettings, Appearance, AssetSourcePreference, DeviceViewMode, ThumbwheelSensitivity,
-    UiScale, VerticalScrollSensitivity,
+    AppIcon, AppSettings, Appearance, AssetSourcePreference, Contrast, DeviceViewMode,
+    ThumbwheelSensitivity, UiScale, VerticalScrollSensitivity,
 };
 
 impl AppState {
@@ -85,6 +85,16 @@ impl AppState {
         self.config
             .edit(|config| config.app_settings.appearance = appearance);
         self.persist_config("appearance setting");
+    }
+    /// Persist the contrast preference. Like [`Self::set_appearance`], the
+    /// caller re-applies the live theme. No-op when unchanged.
+    pub fn set_contrast(&mut self, contrast: Contrast) {
+        if self.config.app_settings.contrast == contrast {
+            return;
+        }
+        self.config
+            .edit(|config| config.app_settings.contrast = contrast);
+        self.persist_config("contrast setting");
     }
     /// Persist the text and interface scale. Open window roots apply the new
     /// rem size when the caller refreshes them. No-op when unchanged.

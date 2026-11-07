@@ -13,6 +13,7 @@ use clap::{Args, Subcommand};
 use roadie_hid::via::{self, Attached, Session};
 use roadie_via::keycode;
 
+use crate::choose;
 use crate::spoken::counted;
 
 /// Exit status for "the scan succeeded, but no VIA device is attached".
@@ -20,6 +21,10 @@ const NOTHING_FOUND: u8 = 2;
 
 #[derive(Debug, Args)]
 pub struct ViaArgs {
+    /// Case-insensitive part of the board's name or serial number, as
+    /// `roadie via list` says it. Not needed when only one is attached.
+    #[arg(long, global = true, value_parser = clap::builder::NonEmptyStringValueParser::new())]
+    pub device: Option<String>,
     #[command(subcommand)]
     pub cmd: Option<ViaCmd>,
 }
@@ -78,7 +83,7 @@ impl ViaCmd {
     ///
     /// Fails when HID enumeration fails, when the device does not answer, or
     /// when a keycode name cannot be resolved.
-    pub async fn run(self) -> Result<ExitCode> {
+    pub async fn run(self, device: Option<&str>) -> Result<ExitCode> {
         // Resolved before the device is opened: a name we cannot resolve is
         // wrong whether or not a keyboard is attached, and "no VIA device
         // found" would send someone hunting the wrong problem.
@@ -101,6 +106,7 @@ impl ViaCmd {
             );
             return Ok(ExitCode::from(NOTHING_FOUND));
         }
+        let attached = choose::narrow(attached, device, &BOARDS)?;
 
         match self {
             Self::List => list(&attached).await,
@@ -136,16 +142,37 @@ fn resolve(argument: &str) -> Result<u16> {
         .with_context(|| format!("{argument} is not a keycode this build knows, nor a number"))
 }
 
-/// Open the first attached device.
+/// Open the one board in reach.
 ///
-/// Deliberately the first rather than a choice: a machine with two VIA boards
-/// is rare enough that inventing a selection flag before anyone has hit the
-/// problem would be guessing at a shape.
-async fn open_first(attached: &[Attached]) -> Result<Session> {
-    let first = attached
-        .first()
-        .context("no VIA device to open, though one was enumerated")?;
-    Ok(Session::open(first).await?)
+/// `attached` is already narrowed by `--device`. More than one left is
+/// refused rather than resolved by enumeration order, because a keycode
+/// written to the wrong board takes a key away from whoever is using it (see
+/// [`crate::choose`]).
+async fn open_one(attached: &[Attached]) -> Result<Session> {
+    let board = choose::only(attached.iter().collect(), &BOARDS)?;
+    Ok(Session::open(board).await?)
+}
+
+/// What `--device` and its refusals call these.
+const BOARDS: choose::Kind = choose::Kind {
+    one: "VIA board",
+    many: "VIA boards",
+};
+
+impl choose::Choosable for Attached {
+    fn spoken(&self) -> String {
+        match &self.serial_number {
+            Some(serial) => format!("{}, serial {serial}", self.name),
+            None => self.name.clone(),
+        }
+    }
+
+    fn names(&self) -> Vec<&str> {
+        vec![
+            &self.name,
+            self.serial_number.as_deref().unwrap_or_default(),
+        ]
+    }
 }
 
 /// `roadie via list`.
@@ -186,7 +213,7 @@ async fn keymap(attached: &[Attached], args: &KeymapArgs) -> Result<ExitCode> {
              every real keyboard matrix is smaller."
         );
     }
-    let mut session = open_first(attached).await?;
+    let mut session = open_one(attached).await?;
     println!(
         "Layer {} of {} (rows 0 to {}, columns 0 to {}):",
         args.layer,
@@ -229,7 +256,7 @@ async fn keymap(attached: &[Attached], args: &KeymapArgs) -> Result<ExitCode> {
 
 /// `roadie via get`.
 async fn get(attached: &[Attached], args: &PositionArgs) -> Result<ExitCode> {
-    let mut session = open_first(attached).await?;
+    let mut session = open_one(attached).await?;
     let code = session.keycode(args.layer, args.row, args.column).await?;
     println!(
         "layer {}, row {}, column {}: {}",
@@ -243,7 +270,7 @@ async fn get(attached: &[Attached], args: &PositionArgs) -> Result<ExitCode> {
 
 /// `roadie via set`.
 async fn set(attached: &[Attached], args: &SetArgs, keycode_value: u16) -> Result<ExitCode> {
-    let mut session = open_first(attached).await?;
+    let mut session = open_one(attached).await?;
     let was = session.keycode(args.layer, args.row, args.column).await?;
     session
         .set_keycode(args.layer, args.row, args.column, keycode_value)

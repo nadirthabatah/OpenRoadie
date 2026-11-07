@@ -22,7 +22,7 @@ use gpui_component::{
     dialog::DialogButtonProps,
     h_flex,
     input::InputState,
-    menu::{DropdownMenu as _, PopupMenu, PopupMenuItem},
+    menu::{PopupMenu, PopupMenuItem},
     tooltip::Tooltip,
     v_flex,
 };
@@ -33,7 +33,7 @@ use roadie_core::hid::DeviceRoute;
 use super::AppView;
 use super::status::{loading_body, notice_body};
 use super::widgets::{
-    add_device_button, connectivity_dot, kind_label, route_label, settings_button,
+    add_device_button, connectivity_dot, desk_button, kind_label, route_label, settings_button,
 };
 use crate::features::lighting::visual as light_visual;
 use crate::services::assets::GlowGeometry;
@@ -44,7 +44,10 @@ use crate::ui::theme::{self, ContentWidth, HEADER_H, Palette, Typography as _};
 
 /// Home (gallery) top bar: title/count, the persisted layout switcher, Settings,
 /// and Add Device.
-pub(super) fn home_header(cx: &mut Context<AppView>) -> impl IntoElement {
+pub(super) fn home_header(
+    page_focus: &gpui::FocusHandle,
+    cx: &mut Context<AppView>,
+) -> impl IntoElement {
     let pal = theme::palette(cx);
     let device_count = AppState::try_read(cx).map_or(0, |state| state.devices().len());
     let current_mode = AppState::try_read(cx).map_or(DeviceViewMode::Grid, |state| {
@@ -69,15 +72,20 @@ pub(super) fn home_header(cx: &mut Context<AppView>) -> impl IntoElement {
                 .flex_1()
                 .min_w_0()
                 .gap_0p5()
-                .child(div().text_heading().child(tr!("Devices")))
+                .child(
+                    crate::ui::a11y::heading("home-title", tr!("Devices"), 1)
+                        .track_focus(page_focus)
+                        .text_heading(),
+                )
                 .child(
                     div()
                         .text_caption()
                         .text_color(pal.text_muted)
-                        .child(device_count_label),
+                        .child(crate::ui::a11y::label("home-count", device_count_label)),
                 ),
         )
         .child(views::device_view_switcher(current_mode, view))
+        .child(desk_button())
         .child(settings_button())
         .child(add_device_button())
 }
@@ -172,7 +180,7 @@ fn device_card(
         .p_4()
         .rounded(pal.card_radius)
         .border_1()
-        .border_color(device_ring(enabled))
+        .border_color(device_ring(enabled, pal))
         .bg(pal.panel)
         .shadow_xs()
         .child(
@@ -272,9 +280,9 @@ fn transport_glance(record: &DeviceRecord, pal: Palette) -> impl IntoElement {
         )
     };
     let color: Hsla = match path {
-        "action-icons/bluetooth.svg" => rgb(theme::ACCENT_BLUE).into(),
+        "action-icons/bluetooth.svg" => theme::accent(),
         "action-icons/bolt.svg" | "action-icons/unifying.svg" => {
-            rgb(theme::STATUS_CONNECTED).into()
+            rgb(theme::status_connected()).into()
         }
         _ => pal.text_muted,
     };
@@ -309,11 +317,17 @@ fn battery_glance(
         .tooltip(move |window, cx| Tooltip::new(hint.clone()).build(window, cx))
 }
 
-fn device_ring(enabled: bool) -> Hsla {
+fn device_ring(enabled: bool, pal: Palette) -> Hsla {
     if enabled {
-        gpui::transparent_black()
+        // High contrast draws every card's edge: on its page the card's fill
+        // is the page's own, and only a faint shadow was left to show it.
+        if theme::is_high_contrast() {
+            pal.border
+        } else {
+            gpui::transparent_black()
+        }
     } else {
-        rgb(theme::STATUS_DISABLED).into()
+        rgb(theme::status_disabled()).into()
     }
 }
 
@@ -399,12 +413,21 @@ pub(super) fn device_menu(
 /// The card corner's ellipsis button, opening the same menu the card offers
 /// on right-click.
 pub(super) fn device_menu_button(record: &DeviceRecord, pal: Palette) -> impl IntoElement {
-    Button::new((ElementId::from("device-menu"), record.record_key()))
-        .ghost()
-        .xsmall()
-        .text_color(pal.text_muted)
-        .icon(IconName::Ellipsis)
-        .dropdown_menu_with_anchor(Anchor::TopRight, device_menu(record))
+    let id = (ElementId::from("device-menu"), record.record_key());
+    crate::ui::components::MenuButton::new(
+        id.clone(),
+        Button::new(id)
+            .ghost()
+            .xsmall()
+            .text_color(pal.text_muted)
+            .icon(IconName::Ellipsis)
+            .child(crate::ui::a11y::spoken_name(
+                "name",
+                tr!("More options for %{name}", name => record.display_name.clone()),
+            )),
+        Anchor::TopRight,
+        device_menu(record),
+    )
 }
 
 /// Confirm before forgetting a device: the record, its custom name, and its
@@ -412,9 +435,18 @@ pub(super) fn device_menu_button(record: &DeviceRecord, pal: Palette) -> impl In
 fn open_delete_confirmation(window: &mut Window, cx: &mut App, record_key: String, name: String) {
     window.open_alert_dialog(cx, move |alert, _, _| {
         alert
-            .title(tr!("Delete %{name}?", name => name.clone()))
-            .description(tr!(
-                "This forgets the device and its settings. Reconnect or pair it again to set it up from scratch."
+            // Elements, not strings: the dialog draws a string as text no
+            // screen reader reaches.
+            .title(crate::ui::a11y::heading(
+                "delete-device-title",
+                tr!("Delete %{name}?", name => name.clone()),
+                2,
+            ))
+            .description(crate::ui::a11y::label(
+                "delete-device-description",
+                tr!(
+                    "This forgets the device and its settings. Reconnect or pair it again to set it up from scratch."
+                ),
             ))
             .button_props(
                 DialogButtonProps::default()
@@ -449,38 +481,143 @@ fn open_rename_dialog(
         input.set_value(custom_name, window, cx);
         input
     });
+    let input_for_save = input.clone();
+    let save = std::rc::Rc::new(move |cx: &mut App| {
+        let custom_name = input_for_save.read(cx).value().to_string();
+        AppState::update(cx, |state, cx| {
+            state.set_device_custom_name(&record_key, &custom_name);
+            cx.emit(StateEvent::InventoryChanged);
+        });
+    });
+    // The field, Cancel and Save, in Tab order. The dialog owns their focus
+    // because Tab in the library's dialog never left a text field.
+    let fields = std::rc::Rc::new([
+        gpui::Focusable::focus_handle(input.read(cx), cx),
+        cx.focus_handle().tab_stop(true),
+        cx.focus_handle().tab_stop(true),
+    ]);
+    // The builder runs on every frame. Focusing the field in it pulled focus
+    // back each frame, so Tab could never leave; the field is focused once.
+    let focus_field = std::rc::Rc::new(std::cell::Cell::new(true));
     window.open_dialog(cx, move |dialog, window, cx| {
-        input.update(cx, |input, cx| input.focus(window, cx));
+        if focus_field.replace(false) {
+            input.update(cx, |input, cx| input.focus(window, cx));
+        }
+        let pal = theme::palette(cx);
+        let step = |fields: std::rc::Rc<[gpui::FocusHandle; 3]>, forward: bool| {
+            move |window: &mut Window, cx: &mut App| {
+                // Neither button focused means the field is: its focus sits
+                // on an element inside the input, not on the input's handle.
+                let at = if fields[1].is_focused(window) {
+                    1
+                } else if fields[2].is_focused(window) {
+                    2
+                } else {
+                    0
+                };
+                let next = if forward { (at + 1) % 3 } else { (at + 2) % 3 };
+                fields[next].focus(window, cx);
+            }
+        };
+        let next = step(fields.clone(), true);
+        let previous = step(fields.clone(), false);
+        // The dialog's own title is text no screen reader reaches, its close
+        // button has no name, and with `button_props` alone it draws no
+        // buttons. A heading and two named buttons replace all three.
         dialog
             .w(px(420.))
-            .title(tr!("Rename device"))
+            .close_button(false)
+            .title(crate::ui::a11y::heading(
+                "rename-device-title",
+                tr!("Rename device"),
+                2,
+            ))
             .child(
-                v_flex().gap_2().child(control_input(&input)).child(
-                    div()
-                        .text_caption()
-                        .text_color(theme::palette(cx).text_muted)
-                        .child(tr!("Leave blank to use the model name.")),
-                ),
+                v_flex()
+                    .gap_3()
+                    // Tab and Shift+Tab are rebound in this context (see
+                    // `app::menu`) and walk the three controls here.
+                    .key_context("FieldDialog")
+                    .on_action(move |_: &crate::app::menu::NextField, window, cx| next(window, cx))
+                    .on_action(move |_: &crate::app::menu::PreviousField, window, cx| {
+                        previous(window, cx);
+                    })
+                    .child(control_input(&input))
+                    .child(
+                        div()
+                            .text_caption()
+                            .text_color(pal.text_muted)
+                            .child(gpui::text!(tr!("Leave blank to use the model name."))),
+                    )
+                    .child(
+                        h_flex()
+                            .justify_end()
+                            .gap_2()
+                            .child(dialog_button(
+                                "rename-device-cancel",
+                                tr!("Cancel"),
+                                &fields[1],
+                                false,
+                                pal,
+                                gpui_component::WindowExt::close_dialog,
+                            ))
+                            .child(dialog_button(
+                                "rename-device-save",
+                                tr!("Save"),
+                                &fields[2],
+                                true,
+                                pal,
+                                {
+                                    let save = save.clone();
+                                    move |window, cx| {
+                                        save(cx);
+                                        window.close_dialog(cx);
+                                    }
+                                },
+                            )),
+                    ),
             )
-            .button_props(
-                DialogButtonProps::default()
-                    .ok_text(tr!("Save"))
-                    .cancel_text(tr!("Cancel"))
-                    .show_cancel(true),
-            )
+            // Enter in the name field.
             .on_ok({
-                let input = input.clone();
-                let record_key = record_key.clone();
+                let save = save.clone();
                 move |_, _, cx| {
-                    let custom_name = input.read(cx).value().to_string();
-                    AppState::update(cx, |state, cx| {
-                        state.set_device_custom_name(&record_key, &custom_name);
-                        cx.emit(StateEvent::InventoryChanged);
-                    });
+                    save(cx);
                     true
                 }
             })
     });
+}
+
+/// A dialog button whose focus the dialog owns, so Tab can be walked by hand.
+fn dialog_button(
+    id: &'static str,
+    label: SharedString,
+    focus: &gpui::FocusHandle,
+    primary: bool,
+    pal: Palette,
+    on_press: impl Fn(&mut Window, &mut App) + 'static,
+) -> BaseButton {
+    let accent = theme::accent();
+    BaseButton::new(id)
+        .track_focus(focus)
+        .accessibility_label(label.clone())
+        .px_4()
+        .h(px(theme::CONTROL_H))
+        .flex()
+        .items_center()
+        .rounded(pal.control_radius)
+        .border_2()
+        .border_color(if primary { accent } else { pal.border })
+        .when(primary, |button| {
+            button.bg(accent).text_color(gpui::white())
+        })
+        .when(!primary, |button| {
+            button.bg(pal.control).text_color(pal.text_primary)
+        })
+        .cursor_pointer()
+        .focus_visible(move |button| button.border_color(pal.text_primary))
+        .child(gpui::Text::new_inaccessible(label))
+        .on_click(move |_, window, cx| on_press(window, cx))
 }
 
 fn connection_view(record: &DeviceRecord, pal: Palette) -> impl IntoElement {
@@ -659,16 +796,16 @@ pub(super) fn device_empty_state(cx: &App) -> Div {
         .child(
             div()
                 .text_title()
-                .child(tr!("No devices connected")),
+                .child(gpui::text!(tr!("No devices connected"))),
         )
         .child(
             div()
                 .max_w(ContentWidth::Narrow.rems())
                 .text_body()
                 .text_center()
-                .child(tr!(
+                .child(gpui::text!(tr!(
                     "Plug in or pair a supported Logitech device — it'll show up here automatically. For direct Bluetooth connections, pair in your computer's bluetooth settings."
-                )),
+                ))),
         )
         .child(
             Button::new("empty-add-device")
@@ -677,7 +814,7 @@ pub(super) fn device_empty_state(cx: &App) -> Div {
                 .label(tr!("Add Device"))
                 .on_click(|_, _, cx| crate::windows::add_device::open(cx)),
         )
-        .child(div().mt_1().max_w(ContentWidth::Narrow.rems()).text_caption().text_center().text_color(pal.text_muted).child(tr!(
+        .child(div().mt_1().max_w(ContentWidth::Narrow.rems()).text_caption().text_center().text_color(pal.text_muted).child(gpui::text!(tr!(
             "Using Logi Options+? Quit it first — both apps compete for HID++ access."
-        )))
+        ))))
 }

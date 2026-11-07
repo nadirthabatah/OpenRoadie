@@ -68,46 +68,44 @@ pub(super) fn assets_page(
         .item(
             SettingItem::new(
                 tr!("Asset source"),
-                SettingField::render(move |_, _, _| {
-                    asset_source_select_field(asset_source_select.clone())
+                SettingField::render(move |_, _, cx| {
+                    asset_source_select_field(asset_source_select.clone(), cx)
                 }),
             )
             .description(tr!(
                 "Automatic uses the first healthy mirror. Choose a source to pin downloads; ROADIE_ASSETS still takes precedence."
             )),
         )
-        .item(
-            SettingItem::new(
-                tr!("Automatically download device images"),
-                SettingField::switch(
-                    |cx| {
-                        AppState::try_read(cx)
-                            .is_none_or(|s| s.app_settings().auto_download_assets)
-                    },
-                    |enabled, cx| {
-                        AppState::update(cx, move |state, cx| {
-                            state.set_auto_download_assets(enabled);
-                            cx.emit(StateEvent::SettingsChanged);
-                        });
-                        // Re-enabling should fetch right away, not wait for the
-                        // next device event.
-                        if enabled {
-                            send_asset_command(cx, AssetCommand::Refresh);
-                        }
-                    },
-                ),
-            )
-            .description(tr!(
+        .item(super::switch_item(
+            "auto-download-assets",
+            tr!("Automatically download device images"),
+            tr!(
                 "Fetch device renders from the selected source when a device connects. When off, OpenRoadie makes no asset network requests; bundled art and the silhouette still show."
-            )),
-        )
+            ),
+            |cx| AppState::try_read(cx).is_none_or(|s| s.app_settings().auto_download_assets),
+            |enabled, cx| {
+                AppState::update(cx, move |state, cx| {
+                    state.set_auto_download_assets(enabled);
+                    cx.emit(StateEvent::SettingsChanged);
+                });
+                // Re-enabling should fetch right away, not wait for the
+                // next device event.
+                if enabled {
+                    send_asset_command(cx, AssetCommand::Refresh);
+                }
+            },
+        ))
         .item(
             SettingItem::new(
                 tr!("Refresh assets"),
                 SettingField::render(move |_, _, cx| {
                     let view = refresh_view.clone();
                     let pal = crate::ui::theme::palette(cx);
-                    action_button("assets-refresh", tr!("Refresh"), pal, move |cx| {
+                    let spoken = (
+                        tr!("Refresh assets"),
+                        tr!("Re-download images for the connected devices now."),
+                    );
+                    action_button("assets-refresh", tr!("Refresh"), spoken, pal, move |cx| {
                         send_asset_command(cx, AssetCommand::Refresh);
                         // Give the spawned sync a moment to land small fetches,
                         // then re-quote the size row so the click visibly did
@@ -122,17 +120,21 @@ pub(super) fn assets_page(
         .item(
             SettingItem::new(
                 tr!("Clear cache"),
-                SettingField::render(move |_, _, cx| {
-                    let view = view.clone();
-                    let pal = crate::ui::theme::palette(cx);
-                    action_button("assets-clear", tr!("Clear"), pal, move |cx| {
-                        send_asset_command(cx, AssetCommand::ClearCache);
-                        // The wipe runs on the main loop's channel arm, not
-                        // synchronously here — without a recompute the row
-                        // keeps quoting the pre-Clear size until the window
-                        // reopens, which reads as the button doing nothing.
-                        refresh_cache_desc_after(&view, Duration::from_millis(750), cx);
-                    })
+                SettingField::render({
+                    let cache_desc = cache_desc.clone();
+                    move |_, _, cx| {
+                        let view = view.clone();
+                        let pal = crate::ui::theme::palette(cx);
+                        let spoken = (tr!("Clear cache"), cache_desc.clone());
+                        action_button("assets-clear", tr!("Clear"), spoken, pal, move |cx| {
+                            send_asset_command(cx, AssetCommand::ClearCache);
+                            // The wipe runs on the main loop's channel arm, not
+                            // synchronously here — without a recompute the row
+                            // keeps quoting the pre-Clear size until the window
+                            // reopens, which reads as the button doing nothing.
+                            refresh_cache_desc_after(&view, Duration::from_millis(750), cx);
+                        })
+                    }
                 }),
             )
             .description(cache_desc),
@@ -142,7 +144,12 @@ pub(super) fn assets_page(
                 tr!("Cache location"),
                 SettingField::render(move |_, _, cx| {
                     let pal = crate::ui::theme::palette(cx);
-                    action_button("assets-open", tr!("Open"), pal, |_| {
+                    // Starts with what is drawn, so voice control's "click Open" finds it.
+                    let spoken = (
+                        SharedString::from(format!("{}, {}", tr!("Open"), tr!("Cache location"))),
+                        tr!("Show the downloaded-images folder in your file manager."),
+                    );
+                    action_button("assets-open", tr!("Open"), spoken, pal, |_| {
                         crate::services::assets::reveal_cache_in_file_manager();
                     })
                 }),
@@ -163,9 +170,16 @@ pub(super) fn assets_page(
 )]
 fn asset_source_select_field(
     asset_source_select: Entity<SelectState<Vec<AssetSourceOption>>>,
-) -> impl IntoElement {
+    cx: &App,
+) -> impl IntoElement + use<> {
+    let choice = asset_source_select
+        .read(cx)
+        .selected_value()
+        .map(|&source| AssetSourceOption { source }.title());
     div().flex_shrink_0().w(px(220.)).h_6().child(
         control_select(&asset_source_select)
+            // Named for the setting; the select says its own value.
+            .accessibility_label(crate::ui::a11y::select_name(tr!("Asset source"), choice))
             .w(px(220.))
             .menu_width(px(220.)),
     )
@@ -203,14 +217,22 @@ pub(super) fn cache_size_description() -> SharedString {
 }
 
 /// A small bordered text button matching the permission rows' "Open" control.
+///
+/// `spoken` is its row's title and description: "Clear" or "Open" alone did
+/// not say what the button acts on.
 fn action_button(
     id: &'static str,
     label: SharedString,
+    spoken: (SharedString, SharedString),
     pal: Palette,
     on_click: impl Fn(&mut App) + 'static,
 ) -> impl IntoElement {
+    use gpui::StatefulInteractiveElement as _;
+
+    let (name, description) = spoken;
     BaseButton::new(id)
-        .accessibility_label(label.clone())
+        .accessibility_label(name)
+        .aria_description(description)
         .flex_shrink_0()
         .px_2()
         .py_1()

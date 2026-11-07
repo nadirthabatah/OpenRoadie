@@ -13,7 +13,7 @@ use gpui_component::{
     IconName, Selectable as _, Sizable as _,
     button::{Button, ButtonVariants as _},
     h_flex,
-    slider::{Slider, SliderEvent, SliderState},
+    slider::{SliderEvent, SliderState},
     v_flex,
 };
 use roadie_core::hid::{Dpi, DpiCapabilities};
@@ -229,7 +229,7 @@ impl Render for DpiPanel {
                         div()
                             .text_body()
                             .text_color(pal.text_muted)
-                            .child(tr!("DPI")),
+                            .child(gpui::text!(tr!("DPI"))),
                     )
                     .child(
                         div()
@@ -252,10 +252,12 @@ impl Render for DpiPanel {
                         div()
                             .text_caption()
                             .text_color(pal.text_muted)
-                            .child(tr!("Presets")),
+                            .child(gpui::text!(tr!("Presets"))),
                     )
                     .child(
-                        h_flex()
+                        // Named, so "Add" is heard as adding a DPI preset.
+                        crate::ui::a11y::group("dpi-presets", tr!("Presets"))
+                            .flex()
                             .gap_2()
                             .flex_wrap()
                             .children(preset_chips)
@@ -325,7 +327,10 @@ fn slider_element(
             .into_any_element()
         }
         (DpiStatus::Ready(_), Some(slider_state)) => {
-            Slider::new(slider_state).horizontal().into_any_element()
+            crate::ui::a11y::StateSlider::new("dpi-slider", slider_state, tr!("DPI"), |value| {
+                gpui::SharedString::from(format!("{value:.0} DPI"))
+            })
+            .into_any_element()
         }
         (DpiStatus::Ready(_), None) => {
             status_line(tr!("Preparing DPI slider…"), pal).into_any_element()
@@ -395,6 +400,11 @@ fn preset_chip(idx: usize, value: Dpi, active: bool, presets: &[Dpi]) -> impl In
                 .xsmall()
                 .ghost()
                 .icon(IconName::Close)
+                // Icon-only, so the name rides inside where a screen reader finds it.
+                .child(crate::ui::a11y::spoken_name(
+                    "name",
+                    tr!("Remove %{name}", name => value.to_string()),
+                ))
                 .on_click(move |_event, _window, cx| {
                     let mut next = presets_for_remove.clone();
                     if idx < next.len() {

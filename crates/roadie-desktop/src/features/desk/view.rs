@@ -33,12 +33,10 @@ mod peripherals;
 use std::collections::BTreeMap;
 
 use gpui::{
-    App, Context, Entity, IntoElement, ParentElement, Render, Styled, Subscription, Task, Window,
-    div, prelude::FluentBuilder as _,
+    App, AsyncApp, Context, Entity, IntoElement, ParentElement, Render, Styled, Subscription, Task,
+    WeakEntity, Window, div, prelude::FluentBuilder as _,
 };
-use gpui_component::{
-    Disableable as _, h_flex, scroll::ScrollableElement as _, slider::SliderState, v_flex,
-};
+use gpui_component::{Disableable as _, h_flex, scroll::ScrollableElement as _, v_flex};
 use roadie_ipc::desk::{
     AudioInterfaceSummary, ControllerSummary, DisplayControl, DisplaySummary, MacroPadSummary,
     NetworkLightSummary, StreamDeckSummary,
@@ -49,6 +47,7 @@ use tokio::sync::mpsc;
 use super::model::DeskModel;
 use crate::services::ipc::{Command, DeskCommand};
 use crate::state::AppState;
+use crate::ui::a11y;
 use crate::ui::components::control_button;
 use crate::ui::theme::{self, Palette, Typography as _};
 use crate::windows::AuxWindow;
@@ -64,7 +63,7 @@ pub(super) use lights::LightKnob;
 /// told, there is nothing to compare the device's answer against, and the thumb
 /// stays where the drag ended while the number beside it says something else.
 struct Slot {
-    state: Entity<SliderState>,
+    state: Entity<a11y::LevelModel>,
     shown: u16,
 }
 
@@ -107,6 +106,10 @@ pub struct DeskPanel {
     /// Kept per device so a refusal stays next to the thing that refused,
     /// rather than in one banner that cannot say which row it belongs to.
     failures: BTreeMap<String, String>,
+    /// Tracked by the window's heading and focused when it opens. Nothing
+    /// else here takes focus on its own, and with nothing focused a screen
+    /// reader announced the window and Tab went nowhere.
+    title_focus: gpui::FocusHandle,
 }
 
 /// What a write is about, so a newer one can replace it.
@@ -126,7 +129,23 @@ enum WriteKey {
 }
 
 impl DeskPanel {
-    pub fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
+    /// Take a finished write out of [`Self::writes`], so the controls it held
+    /// greyed out come back.
+    ///
+    /// Only the write in the slot ever gets here: starting a newer one for the
+    /// same key replaces it, and dropping it cancels it first. Left in place,
+    /// a finished write kept its controls disabled until the window closed —
+    /// one step of gain and both gain buttons were gone.
+    fn finish_write(panel: &WeakEntity<Self>, key: &WriteKey, cx: &mut AsyncApp) {
+        let _ = panel.update(cx, |panel, cx| {
+            panel.writes.remove(key);
+            cx.notify();
+        });
+    }
+
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let title_focus = cx.focus_handle();
+        title_focus.focus(window, cx);
         let mut panel = Self {
             appearance: None,
             model: DeskModel::default(),
@@ -137,6 +156,7 @@ impl DeskPanel {
             writes: BTreeMap::new(),
             pending_phantom: BTreeMap::new(),
             failures: BTreeMap::new(),
+            title_focus,
         };
         panel.refresh(cx);
         panel
@@ -287,27 +307,58 @@ impl DeskPanel {
         })
     }
 
-    /// The card every family draws itself inside.
-    fn card(pal: Palette) -> gpui::Div {
-        v_flex().gap_2().p_3().rounded_md().bg(pal.panel)
+    /// The card every family draws itself inside: a group named for the
+    /// device, so everything inside it is announced as belonging to it.
+    fn card(
+        key: &str,
+        name: impl Into<gpui::SharedString>,
+        pal: Palette,
+    ) -> gpui::Stateful<gpui::Div> {
+        a11y::group(gpui::SharedString::from(format!("desk-card-{key}")), name)
+            .flex()
+            .flex_col()
+            .gap_2()
+            .p_3()
+            .rounded_md()
+            .bg(pal.panel)
     }
 
-    /// A device's name, with whatever it last refused underneath.
+    /// A device's name as a heading, with whatever it last refused underneath.
     fn card_heading(&self, id: &str, name: &str, _pal: Palette) -> impl IntoElement {
         v_flex()
             .gap_1()
-            .child(div().text_body().child(name.to_owned()))
+            .child(a11y::heading("name", name.to_owned(), 3).text_body())
             .when_some(self.failures.get(id).cloned(), |heading, why| {
-                heading.child(div().text_caption().text_color(warning_colour()).child(why))
+                heading.child(
+                    div()
+                        .text_caption()
+                        .text_color(warning_colour())
+                        .child(a11y::label("refused", why)),
+                )
             })
     }
 
-    /// One caption row: what the control is, and what it currently reads.
-    fn reading_row(label: String, value: String, pal: Palette) -> impl IntoElement {
-        h_flex()
-            .justify_between()
-            .child(div().text_caption().child(label))
-            .child(div().text_caption().text_color(pal.text_muted).child(value))
+    /// A line of supporting text inside a card, read by a screen reader.
+    fn caption(
+        slug: &'static str,
+        text: impl Into<gpui::SharedString>,
+        pal: Palette,
+    ) -> impl IntoElement {
+        div()
+            .text_caption()
+            .text_color(pal.text_muted)
+            .child(a11y::label(slug, text))
+    }
+
+    /// One caption row: what the control is, and what it currently reads,
+    /// announced as one phrase.
+    fn reading_row(
+        slug: impl Into<gpui::ElementId>,
+        label: String,
+        value: String,
+        pal: Palette,
+    ) -> impl IntoElement {
+        a11y::reading(slug, label, value, pal)
     }
 }
 
@@ -379,21 +430,31 @@ impl DeskPanel {
                 tr!("Controllers"),
                 controllers
                     .iter()
-                    .map(|controller| Self::controller_card(controller, pal).into_any_element())
+                    .enumerate()
+                    .map(|(index, controller)| {
+                        Self::controller_card(controller, index, pal).into_any_element()
+                    })
                     .collect(),
             ),
             (
                 tr!("Keyboards and macro pads"),
                 pads.iter()
-                    .map(|pad| Self::pad_card(pad, pal).into_any_element())
+                    .enumerate()
+                    .map(|(index, pad)| Self::pad_card(pad, index, pal).into_any_element())
                     .collect(),
             ),
         ];
         sections
             .into_iter()
-            .filter(|(_, cards)| !cards.is_empty())
-            .flat_map(|(heading, cards)| {
-                std::iter::once(div().text_body().child(heading).into_any_element()).chain(cards)
+            .enumerate()
+            .filter(|(_, (_, cards))| !cards.is_empty())
+            .flat_map(|(index, (heading, cards))| {
+                std::iter::once(
+                    a11y::heading(("desk-section", index as u64), heading, 2)
+                        .text_body()
+                        .into_any_element(),
+                )
+                .chain(cards)
             })
             .collect()
     }
@@ -418,10 +479,20 @@ impl Render for DeskPanel {
                     .justify_between()
                     .items_center()
                     .p_4()
-                    .child(div().text_body().child(tr!("The desk")))
+                    .child(
+                        gpui::InteractiveElement::track_focus(
+                            a11y::heading("desk-title", tr!("The desk"), 1),
+                            &self.title_focus,
+                        )
+                        .text_body(),
+                    )
                     .child(
                         control_button("desk-refresh")
                             .label(tr!("Refresh"))
+                            .accessibility_label(crate::ui::a11y::maybe_unavailable(
+                                tr!("Refresh"),
+                                scanning,
+                            ))
                             .disabled(scanning)
                             .on_click(cx.listener(|panel, _event, _window, cx| {
                                 panel.refresh(cx);
@@ -439,20 +510,18 @@ impl Render for DeskPanel {
                     .pb_4()
                     .overflow_y_scrollbar()
                     .when(scanning, |column| {
-                        column.child(
-                            div()
-                                .text_caption()
-                                .text_color(pal.text_muted)
-                                .child(tr!("Looking for everything on the desk…")),
-                        )
+                        column.child(Self::caption(
+                            "desk-scanning",
+                            tr!("Looking for everything on the desk…"),
+                            pal,
+                        ))
                     })
                     .when(empty, |column| {
-                        column.child(
-                            div()
-                                .text_caption()
-                                .text_color(pal.text_muted)
-                                .child(tr!("Nothing on the desk was found.")),
-                        )
+                        column.child(Self::caption(
+                            "desk-empty",
+                            tr!("Nothing on the desk was found."),
+                            pal,
+                        ))
                     })
                     .children(sections),
             )
@@ -474,7 +543,7 @@ impl AuxWindow for DeskPanel {
 /// carrier here: every warning it paints is a sentence that says the same
 /// thing, which is what a screen reader gets.
 fn warning_colour() -> gpui::Rgba {
-    gpui::rgb(theme::STATUS_DISABLED)
+    gpui::rgb(theme::status_disabled())
 }
 
 /// The window's native title — one definition for opening and for the

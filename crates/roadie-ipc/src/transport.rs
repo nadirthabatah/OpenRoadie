@@ -24,8 +24,11 @@ use tarpc::tokio_serde::formats::Bincode;
 /// [`agent_socket_path`](roadie_core::paths::agent_socket_path). Production
 /// builds keep `~/.config/roadie/agent.sock`; local macOS `-dev` bundles use
 /// the sibling `roadie-dev` profile so development agents cannot occupy the
-/// installed app's endpoint. On Windows it is a named pipe in the OS namespace
-/// (`\\.\pipe\roadie-agent.sock`).
+/// installed app's endpoint. On Windows it is a named pipe in the OS namespace,
+/// split the same way: `\\.\pipe\roadie-agent.sock` for production and
+/// `\\.\pipe\roadie-dev-agent.sock` for the dev profile. One fixed name had a
+/// dev build talking to the installed agent, and the mock unable to bind while
+/// that agent ran.
 ///
 /// # Errors
 ///
@@ -42,10 +45,16 @@ pub fn endpoint_name() -> io::Result<interprocess::local_socket::Name<'static>> 
     #[cfg(windows)]
     {
         use interprocess::local_socket::{GenericNamespaced, ToNsName};
-        // A fixed per-machine pipe name. The default DACL grants the creating
-        // user + administrators, which is acceptable for a single-user desktop;
-        // per-user isolation on a shared machine is a future hardening point.
-        "roadie-agent.sock".to_ns_name::<GenericNamespaced>()
+        // A per-machine pipe name per profile. The default DACL grants the
+        // creating user + administrators, which is acceptable for a single-user
+        // desktop; per-user isolation on a shared machine is a future hardening
+        // point.
+        let name = if roadie_core::paths::is_dev_profile() {
+            "roadie-dev-agent.sock"
+        } else {
+            "roadie-agent.sock"
+        };
+        name.to_ns_name::<GenericNamespaced>()
     }
 }
 

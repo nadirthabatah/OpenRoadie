@@ -22,10 +22,11 @@ paths:
   there compiles to an **empty catalog** rather than an error, and every string
   silently renders as its English key — `the_shared_catalog_is_wired_up` in
   `roadie-overlay` and `roadie-agent` is what makes that fail loudly.
-- `gpui`/`gpui_platform` track zed's default branch on purpose; the compatible zed
-  commit is pinned **only in `Cargo.lock`**, in lockstep with the `gpui-component` rev.
-  After any `cargo add`/`cargo update`, check the pins didn't move; restore with
-  `cargo update -p gpui --precise <rev>`.
+- `gpui`/`gpui_platform` are the published `gpui-pre` crates, pinned with `=` to the
+  version gpui-component (the `longbridge/gpui-kit` repository) builds against at its
+  rev. Bump the two together, and every other GPUI crate with them: swr and the
+  updater come in their `-pre` flavours (`swr-gpui-pre`, `gpui-updater-pre`), because
+  the plain ones bring a second, incompatible `gpui`.
 - Two color systems must agree: the bespoke `theme.rs` `Palette` (hand-painted
   surfaces) and gpui-component's `cx.theme()` (widget chrome). Only the `ThemeMode` is
   shared between them. A "white box under dark UI" or a surface that doesn't flip with

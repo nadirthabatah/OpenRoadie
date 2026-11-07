@@ -35,10 +35,14 @@ pub async fn run(_args: ListArgs) -> Result<ExitCode> {
         eprintln!("(inventory read from the running agent)");
         (snapshot.inventory, Some(snapshot.status))
     } else {
-        eprintln!(
-            "(no agent reachable — reading hardware directly; macOS judges this \
-             process's Input Monitoring grant, not the agent's)"
-        );
+        if cfg!(target_os = "macos") {
+            eprintln!(
+                "(no agent reachable — reading hardware directly; macOS judges this \
+                 process's Input Monitoring grant, not the agent's)"
+            );
+        } else {
+            eprintln!("(no agent reachable — reading hardware directly)");
+        }
         let inventories = roadie_hid::enumerate()
             .await
             .context("failed to enumerate HID++ devices")?;
@@ -135,15 +139,27 @@ fn print_empty_notes(status: Option<&AgentStatus>) {
         }
         _ => {
             println!("Notes:");
-            println!("  - On macOS, quit Logi Options+ first — both apps fight over HID++ access.");
+            if cfg!(any(target_os = "macos", target_os = "windows")) {
+                println!(
+                    "  - Quit Logi Options+ if it is installed: it holds Logitech devices \
+                     and both programs fight over HID++ access."
+                );
+            }
+            if cfg!(target_os = "macos") {
+                println!(
+                    "  - A Bluetooth-direct mouse (e.g. Lift, Signature) needs Input \
+                     Monitoring permission: System Settings → Privacy & Security → Input \
+                     Monitoring."
+                );
+            }
+            // Bolt, Unifying, Nano and Lightspeed receivers are all recognised
+            // now; this note once said only Bolt was, long after it stopped
+            // being true.
             println!(
-                "  - A Bluetooth-direct mouse (e.g. Lift, Signature) needs Input Monitoring \
-                 permission: System Settings → Privacy & Security → Input Monitoring."
+                "  - A receiver this build does not recognise still appears in roadie \
+                 devices, with the two numbers a device-support request needs."
             );
-            println!(
-                "  - hidpp 0.2 only recognises Logi Bolt receivers (PID 0xC548); other \
-                 receivers (Unifying) aren't surfaced yet."
-            );
+            println!("  - roadie doctor says why a device could not be opened.");
         }
     }
 }

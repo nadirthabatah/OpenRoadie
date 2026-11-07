@@ -1,18 +1,16 @@
 //! Drawing an Elgato light.
 
 use gpui::{
-    App, AppContext as _, Context, Entity, IntoElement, ParentElement, Styled, Window, div,
+    App, Context, Entity, IntoElement, ParentElement, Styled, Text, Window, div,
     prelude::FluentBuilder as _,
 };
-use gpui_component::{
-    Selectable as _, h_flex,
-    slider::{Slider, SliderEvent, SliderState},
-};
+use gpui_component::{Selectable as _, h_flex, v_flex};
 use roadie_ipc::desk::{NetworkLightChange, NetworkLightSummary};
 
 use super::{DeskPanel, Slot, WriteKey};
 use crate::services::ipc::{Command, DeskCommand};
 use crate::state::AppState;
+use crate::ui::a11y::{self, LevelChosen, LevelModel, LevelSlider, Span};
 use crate::ui::components::Toggle;
 use crate::ui::theme::{Palette, Typography as _};
 
@@ -24,8 +22,18 @@ pub(in crate::features::desk) enum LightKnob {
 }
 
 /// What a Key Light accepts, which is the light's own range rather than ours.
-const LIGHT_BRIGHTNESS: (f32, f32) = (3.0, 100.0);
-const LIGHT_KELVIN: (f32, f32) = (2900.0, 7000.0);
+const LIGHT_BRIGHTNESS: Span = Span {
+    minimum: 3,
+    maximum: 100,
+    step: 1,
+};
+/// The light counts in mireds, so neighbouring Kelvin values map to the same
+/// one. Stepping in fifties keeps every stop distinct.
+const LIGHT_KELVIN: Span = Span {
+    minimum: 2900,
+    maximum: 7000,
+    step: 50,
+};
 
 impl DeskPanel {
     /// Write one light and take back what it then reads.
@@ -39,6 +47,7 @@ impl DeskPanel {
         let Some(sender) = AppState::try_read(cx).map(AppState::ipc_sender) else {
             return;
         };
+        let done = key.clone();
         let task = cx.spawn(async move |panel, cx| {
             let (reply, answer) = tokio::sync::oneshot::channel();
             if sender
@@ -47,6 +56,7 @@ impl DeskPanel {
                 )))
                 .is_err()
             {
+                Self::finish_write(&panel, &done, cx);
                 return;
             }
             if let Ok(Ok(updated)) = answer.await {
@@ -55,6 +65,7 @@ impl DeskPanel {
                     cx.notify();
                 });
             }
+            Self::finish_write(&panel, &done, cx);
         });
         self.writes.insert(key, task);
     }
@@ -64,9 +75,8 @@ impl DeskPanel {
         &mut self,
         light: &NetworkLightSummary,
         knob: LightKnob,
-        window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Entity<SliderState> {
+    ) -> Entity<LevelModel> {
         let key = (light.id.clone(), knob);
         let value = match knob {
             LightKnob::Brightness => light.brightness,
@@ -76,54 +86,31 @@ impl DeskPanel {
             if existing.shown != value {
                 existing.shown = value;
                 let state = existing.state.clone();
-                state.update(cx, |slider, cx| {
-                    slider.set_value(f32::from(value), window, cx);
-                });
+                state.update(cx, |slider, cx| slider.sync(value, cx));
                 return state;
             }
             return existing.state.clone();
         }
-        let (low, high) = match knob {
+        let span = match knob {
             LightKnob::Brightness => LIGHT_BRIGHTNESS,
             LightKnob::Kelvin => LIGHT_KELVIN,
         };
-        let current = f32::from(value);
-        let step = match knob {
-            LightKnob::Brightness => 1.0,
-            // The light counts in mireds, so neighbouring Kelvin values map to
-            // the same one. Stepping in fifties keeps every stop distinct.
-            LightKnob::Kelvin => 50.0,
-        };
-        let slider = cx.new(|_| {
-            SliderState::new()
-                .min(low)
-                .max(high)
-                .step(step)
-                .default_value(current.clamp(low, high))
-        });
+        let slider = a11y::level_model(value, span, cx);
         let id = light.id.clone();
-        let subscription = cx.subscribe(&slider, move |panel, _slider, event: &SliderEvent, cx| {
-            if let SliderEvent::Release(value) = event {
-                let asked = value.start().round().clamp(0.0, f32::from(u16::MAX));
-                #[expect(
-                    clippy::cast_possible_truncation,
-                    clippy::cast_sign_loss,
-                    reason = "clamped to u16's range on the line above"
-                )]
-                let asked = asked as u16;
+        let subscription =
+            cx.subscribe(&slider, move |panel, _slider, chosen: &LevelChosen, cx| {
                 let change = match knob {
                     LightKnob::Brightness => NetworkLightChange {
-                        brightness_percent: Some(asked),
+                        brightness_percent: Some(chosen.0),
                         ..NetworkLightChange::default()
                     },
                     LightKnob::Kelvin => NetworkLightChange {
-                        kelvin: Some(asked),
+                        kelvin: Some(chosen.0),
                         ..NetworkLightChange::default()
                     },
                 };
                 panel.set_light(id.clone(), change, WriteKey::Light(id.clone(), knob), cx);
-            }
-        });
+            });
         self.subscriptions.push(subscription);
         self.light_sliders.insert(
             key,
@@ -135,41 +122,71 @@ impl DeskPanel {
         slider
     }
 
+    /// A slider with its name and reading drawn above it. The slider says both
+    /// itself, so the drawn row is for the eye alone.
+    pub(super) fn labelled_slider(
+        slug: &'static str,
+        name: gpui::SharedString,
+        spoken: String,
+        model: &Entity<LevelModel>,
+        pal: Palette,
+    ) -> impl IntoElement {
+        v_flex()
+            .gap_1()
+            .child(
+                h_flex()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_caption()
+                            .child(Text::new_inaccessible(name.clone())),
+                    )
+                    .child(
+                        div()
+                            .text_caption()
+                            .text_color(pal.text_muted)
+                            .child(Text::new_inaccessible(spoken.clone().into())),
+                    ),
+            )
+            .child(LevelSlider::new(slug, model, name, spoken))
+    }
+
     /// One light: on/off, brightness, colour temperature.
     pub(super) fn light_card(
         &mut self,
         light: &NetworkLightSummary,
         light_index: u64,
         pal: Palette,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
+        let key = format!("light-{light_index}");
         // A light that would not say what it is doing gets its name and the
         // reason, and no controls at all: every number on it would be a zero
         // standing in for "not known", and a slider sitting at zero reads as a
         // light turned all the way down rather than one that is not answering.
         if !light.reachable {
-            return Self::card(pal)
-                .child(div().text_body().child(light.name.clone()))
+            return Self::card(&key, light.name.clone(), pal)
+                .child(a11y::heading("name", light.name.clone(), 3).text_body())
                 .when_some(light.unreachable_reason.clone(), |card, why| {
-                    card.child(div().text_caption().text_color(pal.text_muted).child(why))
+                    card.child(Self::caption("unreachable", why, pal))
                 })
                 .into_any_element();
         }
-        let brightness = self.light_slider(light, LightKnob::Brightness, window, cx);
-        let kelvin = self.light_slider(light, LightKnob::Kelvin, window, cx);
+        let brightness = self.light_slider(light, LightKnob::Brightness, cx);
+        let kelvin = self.light_slider(light, LightKnob::Kelvin, cx);
         let id = light.id.clone();
         let on = light.on;
-        Self::card(pal)
+        Self::card(&key, light.name.clone(), pal)
             .child(
                 h_flex()
                     .justify_between()
-                    .child(div().text_body().child(light.name.clone()))
+                    .child(a11y::heading("name", light.name.clone(), 3).text_body())
                     .child(
-                        Toggle::new(gpui::ElementId::NamedInteger(
-                            "desk-light".into(),
-                            light_index,
-                        ))
+                        Toggle::new(
+                            gpui::ElementId::NamedInteger("desk-light".into(), light_index),
+                            tr!("Light"),
+                        )
                         .label(if on { tr!("On") } else { tr!("Off") })
                         .selected(on)
                         .on_change({
@@ -196,18 +213,20 @@ impl DeskPanel {
                         }),
                     ),
             )
-            .child(Self::reading_row(
-                tr!("Brightness").to_string(),
+            .child(Self::labelled_slider(
+                "brightness",
+                tr!("Brightness"),
                 format!("{}%", light.brightness),
+                &brightness,
                 pal,
             ))
-            .child(Slider::new(&brightness).horizontal())
-            .child(Self::reading_row(
-                tr!("Colour temperature").to_string(),
+            .child(Self::labelled_slider(
+                "kelvin",
+                tr!("Colour temperature"),
                 format!("{} K", light.kelvin),
+                &kelvin,
                 pal,
             ))
-            .child(Slider::new(&kelvin).horizontal())
             .into_any_element()
     }
 }

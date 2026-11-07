@@ -140,7 +140,11 @@ fn status_readout(battery: &BatteryInfo, online: bool, pal: Palette) -> impl Int
                 .child(value_label(battery)),
         )
         .when_some(context_label(battery, online), |row, label| {
-            row.child(gpui::div().text_color(pal.text_muted).child(label))
+            row.child(
+                gpui::div()
+                    .text_color(pal.text_muted)
+                    .child(gpui::text!(label)),
+            )
         })
 }
 
@@ -252,9 +256,9 @@ fn battery_tone(battery: &BatteryInfo) -> BatteryTone {
 
 fn tone_color(tone: BatteryTone, pal: Palette) -> Hsla {
     match tone {
-        BatteryTone::Charging | BatteryTone::Full => rgb(theme::STATUS_CONNECTED).into(),
-        BatteryTone::Low => rgb(theme::STATUS_CONNECTING).into(),
-        BatteryTone::Critical | BatteryTone::Error => rgb(theme::STATUS_DISABLED).into(),
+        BatteryTone::Charging | BatteryTone::Full => rgb(theme::status_connected()).into(),
+        BatteryTone::Low => rgb(theme::status_connecting()).into(),
+        BatteryTone::Critical | BatteryTone::Error => rgb(theme::status_disabled()).into(),
         BatteryTone::Normal => pal.text_primary,
     }
 }

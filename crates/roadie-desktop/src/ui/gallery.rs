@@ -239,7 +239,8 @@ impl ComponentGallery {
             v_flex()
                 .gap_3()
                 .child(
-                    Toggle::new("gallery-toggle")
+                    Toggle::new("gallery-toggle", "Example switch")
+                        .description("What turning it on does, read after its state")
                         .selected(self.toggle_selected)
                         .label(Some(SharedString::from(label)))
                         .on_change(cx.listener(|this, selected: &bool, _, cx| {
@@ -248,7 +249,7 @@ impl ComponentGallery {
                         })),
                 )
                 .child(
-                    Toggle::new("gallery-toggle-disabled")
+                    Toggle::new("gallery-toggle-disabled", "Unavailable switch")
                         .selected(true)
                         .label(Some(SharedString::from("Unavailable")))
                         .disabled(true),

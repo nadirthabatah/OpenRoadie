@@ -182,7 +182,7 @@ mod tests {
         assert!(!m.enabled());
 
         // The first poll enables monitoring and returns nothing buffered yet.
-        assert!(m.poll().is_empty());
+        assert_eq!(m.poll().len(), 0);
         assert!(m.enabled());
 
         // Now events land — except pointer moves, which are dropped.
@@ -203,7 +203,7 @@ mod tests {
             }]
         );
         // Draining leaves the buffer empty.
-        assert!(m.poll().is_empty());
+        assert_eq!(m.poll().len(), 0);
     }
 
     #[test]

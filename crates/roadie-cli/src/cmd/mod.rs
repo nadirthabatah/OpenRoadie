@@ -94,7 +94,7 @@ impl Command {
                 return args
                     .cmd
                     .unwrap_or(streamdeck::StreamDeckCmd::List)
-                    .run()
+                    .run(args.device.as_deref())
                     .await;
             }
             // A serial port is a blocking read, and the listen loop is a
@@ -107,7 +107,11 @@ impl Command {
             // them in order. No async runtime would have anything to do.
             Self::Audio(args) => args.cmd.unwrap_or(audio::AudioCmd::List).run()?,
             Self::Via(args) => {
-                return args.cmd.unwrap_or(via::ViaCmd::List).run().await;
+                return args
+                    .cmd
+                    .unwrap_or(via::ViaCmd::List)
+                    .run(args.device.as_deref())
+                    .await;
             }
             Self::Mcp(args) => mcp::run(args).await?,
             // Profile work is plain file I/O — no async runtime needed.

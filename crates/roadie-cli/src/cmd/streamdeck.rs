@@ -9,6 +9,7 @@
 //! paste into an issue, which is a far better way to close that gap than
 //! asking a user to describe what happened.
 
+use crate::choose;
 use crate::spoken::counted;
 
 mod layout;
@@ -43,6 +44,10 @@ const WATCH: Duration = Duration::from_secs(15);
 /// `roadie streamdeck`, whose bare form defaults to `list`.
 #[derive(Debug, Args)]
 pub struct StreamDeckArgs {
+    /// Case-insensitive part of the deck's name, model or serial number, as
+    /// `roadie streamdeck list` says it. Not needed when only one is attached.
+    #[arg(long, global = true, value_parser = clap::builder::NonEmptyStringValueParser::new())]
+    pub device: Option<String>,
     #[command(subcommand)]
     pub cmd: Option<StreamDeckCmd>,
 }
@@ -132,6 +137,23 @@ pub struct RunArgs {
     /// found and where.
     #[arg(long)]
     pub accept_actions: bool,
+    /// Stop when the deck goes away, instead of waiting for it to come back.
+    ///
+    /// By default a deck that is unplugged, or switched to another computer
+    /// through a USB switch, is waited for, and the layout is put back on it
+    /// when it returns. With this the command ends instead, with exit status
+    /// 5, for a script that restarts it itself.
+    #[arg(long)]
+    pub exit_on_disconnect: bool,
+}
+
+/// What `run` does when its deck goes away.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OnDisconnect {
+    /// Wait for the deck and put the layout back on it.
+    Wait,
+    /// End, with [`DISCONNECTED`].
+    Exit,
 }
 
 #[derive(Debug, Args)]
@@ -177,7 +199,7 @@ impl StreamDeckCmd {
     ///
     /// Propagates enumeration and I/O failures. "No device attached" is not an
     /// error: it exits [`NOTHING_FOUND`].
-    pub async fn run(self) -> Result<ExitCode> {
+    pub async fn run(self, device: Option<&str>) -> Result<ExitCode> {
         // Listing the library needs no device either, and is the answer to
         // "what did I call that layout".
         if matches!(self, Self::Layouts) {
@@ -238,12 +260,30 @@ impl StreamDeckCmd {
         let collections = streamdeck::attached()
             .await
             .context("failed to enumerate HID devices")?;
+        // A layout that runs is often started at login, while its deck may be
+        // switched to another computer; it waits rather than giving up.
+        if let Self::Run(args) = &self
+            && !args.exit_on_disconnect
+        {
+            let collections = match choose::narrow(collections, device, &DECKS) {
+                Ok(found) if !found.is_empty() => found,
+                _ => {
+                    println!("The Stream Deck is not attached yet. Waiting for it.");
+                    wait_for_deck(device).await
+                }
+            };
+            return self
+                .dispatch(&collections, parsed, target.as_deref(), device)
+                .await;
+        }
         if collections.is_empty() {
             report_nothing_found().await?;
             return Ok(ExitCode::from(NOTHING_FOUND));
         }
+        let collections = choose::narrow(collections, device, &DECKS)?;
 
-        self.dispatch(&collections, parsed, target.as_deref()).await
+        self.dispatch(&collections, parsed, target.as_deref(), device)
+            .await
     }
 
     /// The half of the command tree that needs an attached device.
@@ -256,6 +296,7 @@ impl StreamDeckCmd {
         collections: &[Attached],
         parsed: Option<layout::Layout>,
         target: Option<&Path>,
+        device: Option<&str>,
     ) -> Result<ExitCode> {
         match self {
             Self::List => list(collections),
@@ -311,10 +352,15 @@ impl StreamDeckCmd {
                 let path = target.ok_or_else(|| anyhow!("the layout path was not resolved"))?;
                 return apply(collections, path, &layout).await;
             }
-            Self::Run(_) => {
+            Self::Run(args) => {
                 let layout = parsed.ok_or_else(|| anyhow!("the layout was not read"))?;
                 let path = target.ok_or_else(|| anyhow!("the layout path was not resolved"))?;
-                return run_layout(collections, path, &layout).await;
+                let on_disconnect = if args.exit_on_disconnect {
+                    OnDisconnect::Exit
+                } else {
+                    OnDisconnect::Wait
+                };
+                return run_layout(collections, path, &layout, device, on_disconnect).await;
             }
             // Handled before the device scan above.
             Self::Example(_) | Self::Layouts | Self::Set(_) | Self::Unset(_) => {
@@ -863,22 +909,37 @@ async fn run_layout(
     collections: &[Attached],
     file: &Path,
     layout: &layout::Layout,
+    device: Option<&str>,
+    on_disconnect: OnDisconnect,
 ) -> Result<ExitCode> {
-    apply(collections, file, layout).await?;
-
     let bound: std::collections::BTreeMap<u16, &roadie_core::binding::Action> = layout
         .keys
         .iter()
         .filter_map(|key| key.action.as_ref().map(|action| (key.index, action)))
         .collect();
     if bound.is_empty() {
+        apply(collections, file, layout).await?;
         println!();
         println!("No key in this layout has an action, so there is nothing to run.");
         println!("Add an `action` to a key — `roadie streamdeck example` shows how.");
         return Ok(ExitCode::SUCCESS);
     }
 
-    let mut session = open_preferred(collections).await?;
+    let set_up = match apply(collections, file, layout).await {
+        Ok(_) => open_preferred(collections).await,
+        Err(error) => Err(error),
+    };
+    let mut session = match set_up {
+        Ok(session) => session,
+        // A deck mid-way through a USB switch can be listed and still refuse
+        // to be written; waiting covers that the same way as a later loss.
+        Err(error) if on_disconnect == OnDisconnect::Wait => {
+            println!();
+            println!("The Stream Deck could not be set up ({error:#}). Waiting for it.");
+            reconnect(file, layout, device).await
+        }
+        Err(error) => return Err(error),
+    };
     let model = session.model();
     println!();
     println!(
@@ -899,7 +960,21 @@ async fn run_layout(
     loop {
         let events = match session.next_events().await {
             Ok(events) => events,
-            Err(error) => return Ok(report_loop_ended(model_name, &error, "running this layout")),
+            Err(error) if on_disconnect == OnDisconnect::Exit => {
+                return Ok(report_loop_ended(model_name, &error, "running this layout"));
+            }
+            Err(error) => {
+                println!();
+                if matches!(error, roadie_hid::backend::BackendError::Disconnected) {
+                    println!("The {model_name} was disconnected. Waiting for it to come back.");
+                } else {
+                    println!(
+                        "The {model_name} stopped answering ({error}). Waiting for it to come back."
+                    );
+                }
+                session = reconnect(file, layout, device).await;
+                continue;
+            }
         };
         for event in events {
             // Act on the press, not the release: a key that fires twice per
@@ -930,6 +1005,51 @@ async fn run_layout(
                     "the action worker stopped, so nothing further would run"
                 ));
             }
+        }
+    }
+}
+
+/// How often a deck that went away is looked for again.
+const RECONNECT_POLL: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Wait for the deck to be there and working, put the layout back on it, and
+/// hand back a fresh session. The caller has already said why.
+///
+/// Any failure lands here, not only a clean unplug. A deck behind a USB switch
+/// that is switched away and back can surface on Windows as an aborted read,
+/// or refuse a write while it settles, rather than as a disconnect, and the
+/// only useful answer to each is the same: wait, then carry on.
+async fn reconnect(file: &Path, layout: &layout::Layout, device: Option<&str>) -> Session {
+    loop {
+        let collections = wait_for_deck(device).await;
+        // A deck that was powered off comes back with blank keys, so the
+        // layout goes back on before the keys are listened to again.
+        if apply(&collections, file, layout).await.is_err() {
+            continue;
+        }
+        if let Ok(session) = open_preferred(&collections).await {
+            println!(
+                "The {} is back; running the layout again.",
+                session.model().name
+            );
+            println!();
+            return session;
+        }
+    }
+}
+
+/// Look for the deck every [`RECONNECT_POLL`] until it is attached, and hand
+/// back its collections.
+async fn wait_for_deck(device: Option<&str>) -> Vec<Attached> {
+    loop {
+        tokio::time::sleep(RECONNECT_POLL).await;
+        let Ok(found) = streamdeck::attached().await else {
+            continue;
+        };
+        if let Ok(collections) = choose::narrow(found, device, &DECKS)
+            && !collections.is_empty()
+        {
+            return collections;
         }
     }
 }
@@ -1117,12 +1237,13 @@ fn list(collections: &[Attached]) {
     }
 }
 
-/// Open the collection the driver prefers.
+/// Open the collection the driver prefers, on the one deck in reach.
+///
+/// `collections` is already narrowed by `--device`; more than one deck left
+/// in it is refused rather than resolved by enumeration order (see
+/// [`crate::choose`]).
 async fn open_preferred(collections: &[Attached]) -> Result<Session> {
-    let preferred = streamdeck::preferred(collections);
-    let chosen = preferred
-        .first()
-        .ok_or_else(|| anyhow!("no Stream Deck collection could be selected"))?;
+    let chosen = choose::only(streamdeck::preferred(collections), &DECKS)?;
     Session::open(chosen).await.with_context(|| {
         format!(
             "failed to open the {}. The commonest cause is another program holding it: \
@@ -1131,6 +1252,29 @@ async fn open_preferred(collections: &[Attached]) -> Result<Session> {
             chosen.model.name
         )
     })
+}
+
+/// What `--device` and its refusals call these.
+const DECKS: choose::Kind = choose::Kind {
+    one: "Stream Deck",
+    many: "Stream Decks",
+};
+
+impl choose::Choosable for Attached {
+    fn spoken(&self) -> String {
+        match &self.serial_number {
+            Some(serial) => format!("{}, serial {serial}", self.model.name),
+            None => self.model.name.to_owned(),
+        }
+    }
+
+    fn names(&self) -> Vec<&str> {
+        vec![
+            self.model.name,
+            &self.name,
+            self.serial_number.as_deref().unwrap_or_default(),
+        ]
+    }
 }
 
 /// Parse a six-hex-digit colour.

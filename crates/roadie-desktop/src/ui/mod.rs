@@ -1,5 +1,6 @@
 //! Shared settings-app UI components and theme.
 
+pub(crate) mod a11y;
 pub(crate) mod action;
 pub(crate) mod battery;
 pub(crate) mod carousel;

@@ -3,7 +3,7 @@
 use gpui::{
     AnyElement, Context, ElementId, InteractiveElement, IntoElement, ParentElement, Rems,
     SharedString, StatefulInteractiveElement as _, Styled, div, prelude::FluentBuilder as _, px,
-    rems, rgb,
+    rems,
 };
 use gpui_base::Button as BaseButton;
 use gpui_component::{
@@ -105,11 +105,10 @@ fn device_grid(cx: &mut Context<AppView>) -> impl IntoElement {
     let view = cx.entity();
     let pal = theme::palette(cx);
     let cards = AppState::try_read(cx).map_or_else(Vec::new, |state| {
-        let active_idx = state.selected_device_index().unwrap_or(0);
         ordered_device_indices(state.devices())
             .into_iter()
             .map(|idx| {
-                device_card_element(state, idx, active_idx, view.clone(), pal)
+                device_card_element(state, idx, view.clone(), pal)
                     .min_w(theme::GALLERY_CARD_MIN_W)
                     .max_w(theme::GALLERY_CARD_MAX_W)
                     .flex_1()
@@ -140,11 +139,10 @@ fn device_list(cx: &mut Context<AppView>) -> impl IntoElement {
     let view = cx.entity();
     let pal = theme::palette(cx);
     let rows = AppState::try_read(cx).map_or_else(Vec::new, |state| {
-        let active_idx = state.selected_device_index().unwrap_or(0);
         ordered_device_indices(state.devices())
             .into_iter()
             .map(|idx| {
-                device_list_row(state, idx, active_idx, view.clone(), pal)
+                device_list_row(state, idx, view.clone(), pal)
                     .context_menu(device_menu(&state.devices()[idx]))
             })
             .collect()
@@ -193,8 +191,7 @@ fn device_carousel(cx: &mut Context<AppView>) -> impl IntoElement {
                 let Some(&idx) = render_order.get(position) else {
                     return div().into_any_element();
                 };
-                let active_idx = state.selected_device_index().unwrap_or(0);
-                device_card_element(state, idx, active_idx, view.clone(), pal)
+                device_card_element(state, idx, view.clone(), pal)
                     .context_menu(device_menu(&state.devices()[idx]))
                     .into_any_element()
             })
@@ -215,12 +212,10 @@ fn device_carousel(cx: &mut Context<AppView>) -> impl IntoElement {
 fn device_card_element(
     state: &AppState,
     idx: usize,
-    active_idx: usize,
     view: gpui::Entity<AppView>,
     pal: Palette,
 ) -> BaseButton {
     let record = &state.devices()[idx];
-    let active = idx == active_idx;
     let record_key = record.record_key();
     let enabled = state.device_enabled(&record.config_key);
     let light_enabled =
@@ -232,10 +227,12 @@ fn device_card_element(
         .active(gpui::Styled::shadow_2xs)
         .accessibility_label(record.display_name.clone())
         .aria_description(device_accessibility_description(record))
-        .aria_selected(active)
+        // No `aria_selected`: AccessKit treats a selected button as a selection
+        // item, not something to press, so the card lost its Invoke action and
+        // voice control and screen-reader activation could not open it.
         .cursor_pointer()
-        .hover(move |card| card.border_color(rgb(theme::ACCENT_BLUE)).shadow_sm())
-        .focus_visible(move |card| card.border_color(rgb(theme::ACCENT_BLUE)).shadow_sm())
+        .hover(move |card| card.border_color(theme::accent()).shadow_sm())
+        .focus_visible(move |card| card.border_color(theme::accent()).shadow_sm())
         .on_click(move |_, _, cx| {
             view.update(cx, |this, cx| {
                 this.open_device(record_key.clone(), cx);
@@ -246,12 +243,10 @@ fn device_card_element(
 fn device_list_row(
     state: &AppState,
     idx: usize,
-    active_idx: usize,
     view: gpui::Entity<AppView>,
     pal: Palette,
 ) -> BaseButton {
     let record = &state.devices()[idx];
-    let active = idx == active_idx;
     let enabled = state.device_enabled(&record.config_key);
     let light_enabled =
         record.kind == DeviceKind::Light && state.light_enabled_for(&record.device_key());
@@ -269,7 +264,7 @@ fn device_list_row(
         .py_2()
         .rounded(pal.card_radius)
         .border_1()
-        .border_color(device_ring(enabled))
+        .border_color(device_ring(enabled, pal))
         .bg(pal.panel)
         .shadow_xs()
         .child(
@@ -333,10 +328,12 @@ fn device_list_row(
         .active(gpui::Styled::shadow_2xs)
         .accessibility_label(record.display_name.clone())
         .aria_description(device_accessibility_description(record))
-        .aria_selected(active)
+        // No `aria_selected`: AccessKit treats a selected button as a selection
+        // item, not something to press, so the card lost its Invoke action and
+        // voice control and screen-reader activation could not open it.
         .cursor_pointer()
-        .hover(move |row| row.border_color(rgb(theme::ACCENT_BLUE)).shadow_sm())
-        .focus_visible(move |row| row.border_color(rgb(theme::ACCENT_BLUE)).shadow_sm())
+        .hover(move |row| row.border_color(theme::accent()).shadow_sm())
+        .focus_visible(move |row| row.border_color(theme::accent()).shadow_sm())
         .on_click(move |_, _, cx| {
             view.update(cx, |this, cx| {
                 this.open_device(record_key.clone(), cx);
@@ -355,7 +352,10 @@ fn device_accessibility_description(record: &DeviceRecord) -> SharedString {
     } else {
         format!("{}. {}", record.model_name, super::kind_label(record.kind))
     };
-    let metadata = format!("{status}. {identity}. {}.", connection_summary(record));
+    // The visible summary separates its parts with a middle dot, which some
+    // screen readers say aloud; a comma is a pause.
+    let connection = connection_summary(record).replace(" \u{b7} ", ", ");
+    let metadata = format!("{status}. {identity}. {connection}.");
     if let Some(battery) = record.battery.as_ref() {
         let battery = if battery_charging_no_reading(battery) {
             tr!("Charging").to_string()

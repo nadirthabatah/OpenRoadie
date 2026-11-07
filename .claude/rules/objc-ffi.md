@@ -31,7 +31,7 @@ files; **keep this table in sync when you add or move one**:
 | `roadie-camera/src/uvc.rs`, `.../uvc/iokit.rs` | IOKit USB / UVC control transfers; every `unsafe` in the macOS UVC backend lives in `iokit.rs` |
 | `roadie-display/src/macos.rs` | `IOAVService` — the private IOKit SPI carrying I²C to an external monitor, resolved by `dlopen`/`dlsym`, plus the `DCPAVServiceProxy` registry walk that finds the displays |
 | `roadie-desktop/src/platform/registration/macos.rs` | `SMAppService` registration of the agent's launchd service (the login-item side of the agent lifecycle; the GUI must own it — the API resolves the plist against the calling app's bundle) |
-| `roadie-desktop/src/platform/os.rs` | `NSProcessInfo` OS version + the `NSAppearance` titlebar sync |
+| `roadie-desktop/src/platform/os.rs` | `NSProcessInfo` OS version, the `NSAppearance` titlebar sync, the `NSWorkspace` Increase Contrast read, and AccessKit's window focus forwarder on gpui's `GPUIWindow` / `GPUIPanel` classes |
 | `roadie-hid/src/permissions.rs` | `IOHIDCheckAccess` / `IOHIDRequestAccess` (the prompting half of Input Monitoring) |
 | `roadie-hook/src/macos.rs` | the CGEventTap (on `core-graphics`, see below), the `NSWorkspace` frontmost-app read, the Accessibility-trust check/prompt, and the HID sender-id lookup |
 | `roadie-inject/src/inject/macos.rs` | CGEvent synthesis, media-key `NSEvent`s, raw `AXUIElement` navigation, and the `dlopen`'d private SPIs |
@@ -213,7 +213,8 @@ under a `SAFETY` comment. Where it currently lives on macOS:
 - `overlay/platform.rs` — `NSEvent::removeMonitor` and the
   `CGGetActiveDisplayList` / `CGDisplayBounds` pair.
 - `desktop/platform/os.rs` — reading AppKit's `NSAppearanceName` statics to set
-  `NSApp.appearance`.
+  `NSApp.appearance`, and `accesskit_macos::add_focus_forwarder_to_window_class` on
+  gpui's window classes (gpui installs AccessKit's adapter but not this).
 - `desktop/platform/registration/macos.rs` — the `SMAppService` calls (all generated
   bindings are `unsafe fn`s) and the `SMAppServiceErrorDomain` extern static.
   Together with `os.rs`, the GUI's entire `unsafe` surface.
@@ -249,14 +250,14 @@ and the only ones that should:
 
 `cocoa` / `objc` 0.x are gone from every crate's direct deps (they remain in
 `Cargo.lock` only transitively via gpui — expected). Use `cargo add` for objc2
-framework crates, then **verify the `zed` / `gpui-component` git pins in
-`Cargo.lock` didn't move** (the gpui pin is held only by the lock; a resolve can
-bump it — restore with `cargo update -p gpui --precise <commit>`).
+framework crates; `gpui` is an exactly pinned registry crate, so a resolve cannot
+move it.
 
 Every ObjC / Core-framework crate is declared **once** in the workspace table —
 `objc2`, `objc2-app-kit`, `objc2-foundation`, `objc2-core-foundation`,
 `objc2-core-graphics`, `objc2-application-services`, `objc2-io-kit`,
-`objc2-service-management`, `block2`, `core-graphics`, `core-foundation`. The header-gated ones carry
+`objc2-service-management`, `block2`, `core-graphics`, `core-foundation`, and
+`accesskit_macos` (held at the version gpui's own adapter uses). The header-gated ones carry
 `default-features = false` there, and each member inherits with
 `workspace = true` and adds only the feature modules it uses. A new one belongs
 in that table too, never inline in a member manifest: the unified version is what

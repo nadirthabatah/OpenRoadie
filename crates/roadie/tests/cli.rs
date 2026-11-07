@@ -575,9 +575,14 @@ fn a_printed_command_is_one_that_actually_runs() {
     let run = sandbox.run(&rest);
     run.expect_status_in(&[0, 1, 2]);
     if run.status() == 1 {
-        // An exit of 1 is only honest here when it is the deck that failed,
-        // not the command line.
-        run.expect_says("failed to open the");
+        // An exit of 1 is only honest here when it is the desk that answered,
+        // not the command line: a deck that would not open, or several decks
+        // with none chosen, which is refused rather than guessed at.
+        let said = run.said();
+        assert!(
+            said.contains("failed to open the") || said.contains("This acts on one Stream Deck"),
+            "an exit of 1 has to be the hardware's answer, not the parser's:\n{said}"
+        );
     }
     assert!(
         !run.said().contains("unexpected argument"),

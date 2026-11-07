@@ -57,6 +57,10 @@ impl ReceiverDescriptor {
 pub const RECEIVERS: &[ReceiverDescriptor] = &[
     ReceiverDescriptor::logitech(0xc52b, ReceiverBrand::Unifying, ReceiverProtocol::Unifying),
     ReceiverDescriptor::logitech(0xc532, ReceiverBrand::Unifying, ReceiverProtocol::Unifying),
+    // Nano receiver sold with low-end combos such as the MK270. Solaar files it
+    // with 0xc537 as a Nano receiver differing only in holding two devices
+    // rather than six.
+    ReceiverDescriptor::logitech(0xc534, ReceiverBrand::Nano, ReceiverProtocol::Unifying),
     // Nano receiver bundled with the G602.
     ReceiverDescriptor::logitech(0xc537, ReceiverBrand::Nano, ReceiverProtocol::Unifying),
     // Lightspeed gaming receiver used by the G502, G Pro Wireless, G604, and

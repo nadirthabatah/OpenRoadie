@@ -468,7 +468,7 @@ mod tests {
     /// cannot see the key. The caller needs the list so it can say.
     #[test]
     fn the_characters_a_font_cannot_draw_are_reported() {
-        assert!(missing_from("MUTE MIC").is_empty());
+        assert_eq!(missing_from("MUTE MIC").len(), 0);
         assert!(
             missing_from("mute mic").is_empty(),
             "lowercase is drawn as capitals"

@@ -192,7 +192,9 @@ impl Render for AddDeviceView {
         let pal = theme::palette(cx);
         let state = cx.try_global::<PairingUi>().cloned().unwrap_or_default();
 
-        v_flex()
+        crate::ui::a11y::group("add-device-window", tr!("Add Device"))
+            .flex()
+            .flex_col()
             .size_full()
             .bg(pal.page)
             .text_color(pal.text_primary)
@@ -215,7 +217,7 @@ impl Render for AddDeviceView {
                     .child(
                         div()
                             .text_heading()
-                            .child(tr!("Add Device")),
+                            .child(gpui::text!(tr!("Add Device"))),
                     )
                     .child(AddDeviceBody { state }),
             )
@@ -286,7 +288,7 @@ fn pairing_body(state: PairingUi, pal: Palette) -> impl IntoElement {
                     div()
                         .text_color(pal.text_primary)
                         .font_weight(FontWeight::MEDIUM)
-                        .child(tr!("Device paired")),
+                        .child(gpui::text!(tr!("Device paired"))),
                 )
                 .child(hint(
                     tr!("Paired to slot %{slot}.", slot => slot.to_string()),
@@ -303,7 +305,7 @@ fn pairing_body(state: PairingUi, pal: Palette) -> impl IntoElement {
                     div()
                         .text_color(pal.text_primary)
                         .font_weight(FontWeight::MEDIUM)
-                        .child(tr!("Pairing failed")),
+                        .child(gpui::text!(tr!("Pairing failed"))),
                 )
                 .child(hint(pairing_failure_text(&failure), pal))
                 .when(

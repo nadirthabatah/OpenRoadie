@@ -2,7 +2,7 @@
 
 use super::{
     App, AppState, Entity, FluentBuilder, IconName, InteractiveElement, ParentElement,
-    SettingField, SettingGroup, SettingItem, SettingPage, Slider, SliderState, StateEvent, Styled,
+    SettingField, SettingGroup, SettingItem, SettingPage, SliderState, StateEvent, Styled,
     ThumbwheelSensitivity, VerticalScrollSensitivity, div, h_flex, px, theme, v_flex,
 };
 use crate::ui::theme::Typography as _;
@@ -64,34 +64,28 @@ pub(super) fn general_page(
     // Windows notification-area icon (honored at next agent launch); Linux
     // has no tray, so no switch.
     #[cfg(any(target_os = "macos", target_os = "windows"))]
-    let group = group.item(
-        SettingItem::new(
-            if cfg!(target_os = "macos") {
-                tr!("Show in menu bar")
-            } else {
-                tr!("Show in the notification area")
-            },
-            SettingField::switch(
-                |cx| {
-                    AppState::try_read(cx)
-                        .is_some_and(|s| s.app_settings().show_in_menu_bar)
-                },
-                |enabled, cx| {
-                    AppState::update(cx, move |state, cx| {
-                        state.set_show_in_menu_bar(enabled);
-                        cx.emit(StateEvent::SettingsChanged);
-                    });
-                },
-            ),
-        )
-        .description(if cfg!(target_os = "macos") {
+    let group = group.item(super::switch_item(
+        "show-in-menu-bar",
+        if cfg!(target_os = "macos") {
+            tr!("Show in menu bar")
+        } else {
+            tr!("Show in the notification area")
+        },
+        if cfg!(target_os = "macos") {
             tr!("Keep OpenRoadie's icon in the menu bar. When off, it stays in the Dock instead.")
         } else {
             tr!(
                 "Keep OpenRoadie's icon in the taskbar notification area. Takes effect the next time the background agent starts."
             )
-        }),
-    );
+        },
+        |cx| AppState::try_read(cx).is_some_and(|s| s.app_settings().show_in_menu_bar),
+        |enabled, cx| {
+            AppState::update(cx, move |state, cx| {
+                state.set_show_in_menu_bar(enabled);
+                cx.emit(StateEvent::SettingsChanged);
+            });
+        },
+    ));
 
     SettingPage::new(tr!("General"))
         .icon(IconName::Settings)
@@ -101,27 +95,25 @@ pub(super) fn general_page(
 
 /// The smooth-scrolling switch.
 fn smooth_scrolling_item() -> SettingItem {
-    SettingItem::new(
+    super::switch_item(
+        "smooth-scrolling",
         tr!("Smooth scrolling"),
-        SettingField::switch(
-            |cx| AppState::try_read(cx).is_some_and(|s| s.app_settings().smooth_scroll),
-            |enabled, cx| {
-                AppState::update(cx, move |state, cx| {
-                    state.set_smooth_scroll(enabled);
-                    cx.emit(StateEvent::SettingsChanged);
-                });
-            },
-        ),
+        tr!("Animate traditional mouse-wheel input while leaving trackpad scrolling unchanged."),
+        |cx| AppState::try_read(cx).is_some_and(|s| s.app_settings().smooth_scroll),
+        |enabled, cx| {
+            AppState::update(cx, move |state, cx| {
+                state.set_smooth_scroll(enabled);
+                cx.emit(StateEvent::SettingsChanged);
+            });
+        },
     )
-    .description(tr!(
-        "Animate traditional mouse-wheel input while leaving trackpad scrolling unchanged."
-    ))
 }
 
 fn thumbwheel_sensitivity_field(slider: &Entity<SliderState>, cx: &mut App) -> gpui::Div {
     let value = ThumbwheelSensitivity::from_rounded(slider.read(cx).value().start());
     sensitivity_field(
         slider,
+        tr!("Thumb Wheel Sensitivity"),
         value.to_string(),
         value == ThumbwheelSensitivity::DEFAULT,
         cx,
@@ -132,6 +124,7 @@ fn vertical_scroll_sensitivity_field(slider: &Entity<SliderState>, cx: &mut App)
     let value = VerticalScrollSensitivity::from_rounded(slider.read(cx).value().start());
     sensitivity_field(
         slider,
+        tr!("Vertical Scroll Sensitivity"),
         value.to_string(),
         value == VerticalScrollSensitivity::DEFAULT,
         cx,
@@ -140,6 +133,7 @@ fn vertical_scroll_sensitivity_field(slider: &Entity<SliderState>, cx: &mut App)
 
 fn sensitivity_field(
     slider: &Entity<SliderState>,
+    name: gpui::SharedString,
     value: String,
     is_default: bool,
     cx: &mut App,
@@ -152,7 +146,15 @@ fn sensitivity_field(
             h_flex()
                 .items_center()
                 .gap_3()
-                .child(div().w(px(180.)).child(Slider::new(slider)))
+                .child(div().w(px(180.)).child({
+                    let spoken = gpui::SharedString::from(value.clone());
+                    crate::ui::a11y::StateSlider::new(
+                        gpui::SharedString::from(format!("settings-sensitivity-{name}")),
+                        slider,
+                        name,
+                        move |_| spoken.clone(),
+                    )
+                }))
                 .child(
                     div()
                         .w(px(72.))
@@ -175,23 +177,22 @@ fn sensitivity_field(
 /// The launch-at-login switch — a persisted config value the agent reads
 /// (the sunk switch); the setter never unregisters.
 fn launch_at_login_item() -> SettingItem {
-    SettingItem::new(
+    super::switch_item(
+        "launch-at-login",
         tr!("Launch at login"),
-        SettingField::switch(
-            |cx| AppState::try_read(cx).is_some_and(|s| s.app_settings().launch_at_login),
-            |enabled, cx| {
-                AppState::update(cx, move |state, cx| {
-                    state.set_launch_at_login(enabled);
-                    cx.emit(StateEvent::SettingsChanged);
-                });
-            },
-        ),
+        if cfg!(target_os = "macos") {
+            tr!("Automatically start OpenRoadie when you log in to macOS.")
+        } else {
+            tr!("Automatically start OpenRoadie when you log in.")
+        },
+        |cx| AppState::try_read(cx).is_some_and(|s| s.app_settings().launch_at_login),
+        |enabled, cx| {
+            AppState::update(cx, move |state, cx| {
+                state.set_launch_at_login(enabled);
+                cx.emit(StateEvent::SettingsChanged);
+            });
+        },
     )
-    .description(if cfg!(target_os = "macos") {
-        tr!("Automatically start OpenRoadie when you log in to macOS.")
-    } else {
-        tr!("Automatically start OpenRoadie when you log in.")
-    })
 }
 
 /// The `RequiresApproval` notice: with the direct-launch fallback gone, the
@@ -222,6 +223,6 @@ fn open_login_items_button(cx: &App) -> BaseButton {
         .bg(pal.control)
         .hover(move |s| s.bg(pal.control_hover))
         .focus_visible(move |s| s.bg(pal.control_hover))
-        .child(tr!("Open Login Items"))
+        .child(gpui::text!(tr!("Open Login Items")))
         .on_click(|_, _, _| crate::platform::registration::open_login_items_settings())
 }

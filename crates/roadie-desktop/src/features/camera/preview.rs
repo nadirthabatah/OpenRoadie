@@ -214,7 +214,7 @@ impl Render for CameraPreview {
                             .cursor_pointer()
                             .hover(|s| s.text_color(pal.text_primary))
                             .focus_visible(|s| s.text_color(pal.text_primary))
-                            .child(tr!("Click to enable camera access."))
+                            .child(gpui::text!(tr!("Click to enable camera access.")))
                             .on_click(|_, _, cx| {
                                 crate::features::camera::request_camera_access(cx);
                             }),

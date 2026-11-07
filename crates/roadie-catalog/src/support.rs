@@ -61,17 +61,27 @@ impl Driver {
     /// Written to be read aloud: the point of the survey is that someone who
     /// cannot see the screen learns what each device offers without opening
     /// anything.
+    ///
+    /// For the two families whose members differ widely, it says so. An
+    /// entry-level Logitech mouse has no adjustable pointer speed and no
+    /// backlight, and a monitor without speakers has no volume; the survey
+    /// cannot know which a device has without asking it, so it names the
+    /// family's range and leaves the device's own answer to its command. It
+    /// once listed all four for a Nano-receiver combo that has none of the
+    /// last three.
     #[must_use]
     pub const fn what_it_configures(self) -> &'static str {
         match self {
-            Self::HidPlusPlus => "buttons, pointer speed, scroll wheel, and backlight",
+            Self::HidPlusPlus => {
+                "whichever of buttons, pointer speed, scroll wheel, and backlight it has"
+            }
             // The same answer for both, and not by coincidence: they are
             // lights, and these are the three things a light has.
             Self::Litra | Self::KeyLight => "power, brightness, and colour temperature",
             Self::StreamDeck => "key images, labels, brightness, and key actions",
             Self::Uvc => "brightness, contrast, exposure, focus, and zoom",
             Self::Via => "what each key sends, across every keymap layer",
-            Self::Ddc => "brightness, contrast, input source, and volume",
+            Self::Ddc => "whichever of brightness, contrast, input source, and volume it offers",
             Self::TourBox => "what each button, knob and dial does",
             Self::Focusrite => "preamp gain, mute, and 48 volt phantom power",
         }
@@ -694,7 +704,7 @@ mod tests {
             "a driver was added to the enum without being added here"
         );
         for (index, driver) in drivers.iter().enumerate() {
-            assert!(!driver.what_it_configures().is_empty());
+            assert_ne!(driver.what_it_configures(), "");
             assert!(driver.command().starts_with("roadie "));
             assert!(
                 drivers[..index]

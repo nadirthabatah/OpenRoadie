@@ -296,7 +296,7 @@ fn raw_report_write_rejects_empty_and_oversized_inputs_without_io() {
             oversized,
             ChannelError::InvalidRawReportLength(65)
         ));
-        assert!(handle.written_reports().is_empty());
+        assert_eq!(handle.written_reports(), [] as [std::vec::Vec<u8>; 0]);
     });
 }
 

@@ -277,14 +277,9 @@ no `dlsym`'d signature checked against the one Apple ships — a wrong one
 type-checks perfectly and is undefined behaviour when called. The full note is
 in `.claude/rules/cross-platform.md`.
 
-**A new dependency can move the `gpui` git pin, and a plain `cargo check` is
-enough to do it.** The manifest entry has no rev, so a re-resolve follows the
-branch's HEAD. It does not look like a dependency problem: it is a compile
-error deep inside `gpui_linux` about `ImageFormat::iter`, with a note about two
-versions of `strum`. `git checkout Cargo.lock` does not fix it, because the
-next `cargo check` moves it again. Let the lock pick up the genuinely new
-packages, then `cargo update -p gpui --precise cc053a4a...`, then check that
-`git diff Cargo.lock` shows only the new crates.
+**GPUI is the exactly pinned `gpui-pre` crate.** Bump it, gpui-component's rev
+and the `-pre` flavours of swr and the updater together; a GPUI-based crate
+that pulls in plain `gpui` shows up as a type mismatch between two `App`s.
 
 **Read the three surfaces side by side; the odd one out is usually a bug.**
 Every device family is reachable three ways — the command line, the MCP
@@ -986,6 +981,340 @@ about it is still unverified against a running kernel.
 
 Then headsets, MIDI pads, RGB on other brands, and other vendors' mice and
 keyboards.
+
+### 6.13 The first Windows sitting, 2026-11-03
+
+The desk moved to a Windows 11 PC (RTX 5090). First native run, not a
+cross-compile. What answered with no vendor software involved: both Stream
+Decks (XL brightness and key painting verified; presses not yet, see below),
+the Key Light Neo on USB (on, off), the TourBox Elite on COM3 (port opens,
+handshake runs; no presses yet), the Kiiboom Cybrix 16 over VIA (protocol 12,
+keymap reads — only after the report-ID fix in `roadie-hid/src/via.rs`, since
+Windows needs byte zero on every output report), and the Vocaster Two (gain
+written, read back, restored on input 2).
+
+Four findings worth keeping:
+
+- **The Vocaster needed a GUID, not a driver.** Windows binds Microsoft's
+  own WinUSB to interface 3, but the device names no interface GUID, so no
+  device interface is ever published and `nusb` cannot open it. Writing
+  `DeviceInterfaceGUIDs` into that node's `Device Parameters` and restarting
+  only that node fixes it. `roadie audio prepare` does exactly that, behind
+  one UAC prompt; the claim error now names that command. Verified end to
+  end on this desk: GUID removed, the error named the command, `prepare`
+  fixed it, `status` read both inputs.
+- **Rust 1.99 broke the gate, and it is fixed.** `double_must_use` on every
+  `#[async_trait]` method (async-trait 0.1.92 stops emitting it), a deprecated
+  `fetch_update` (`try_update` exists on the 1.98 floor), and the new
+  `assert_is_empty` lint across 51 tests. A fresh advisory database also
+  failed cargo-deny on two yanked crates and on rustls, webpki-roots and
+  tokio advisories, all patched within their semver lines with the gpui pin
+  held. The zbus 5 subcrates are ignored with a reason in `deny.toml`:
+  gpui_linux keeps zbus 5 in the app either way. Two Windows-only gate
+  failures were fixed too: a rustdoc link to a type Windows lacks, and the
+  `ci.yml` drift test choking on CRLF checkouts. Full gate on this PC: 8 CI
+  jobs passed (shell and the OS-bound test and MSRV jobs skipped by the
+  runner; MSRV and `cargo test --workspace` were run by hand and pass).
+  Running the runner itself on Windows needs a copy of `xtask.exe` outside
+  `target`, or its publish-closure step cannot rebuild itself.
+- **Smart App Control blocks every freshly built binary.** It was on here, so
+  build scripts, proc-macro DLLs and a rebuilt `roadie.exe` were all refused
+  (os error 4551, Code Integrity event 3077). Nadir had it switched off on
+  2026-11-03 (`VerifiedAndReputablePolicyState` = 0), after which everything
+  built and ran. It is still a release problem: an unsigned
+  Windows build will not start for any user who has it on, so Windows
+  releases need code signing (SignPath Foundation signs open-source projects
+  free).
+- **Logi Options+ is installed and running on this PC.** On macOS it is what
+  swallowed Stream Deck presses; expect the same here until it is quit.
+- **The monitors.** Windows draws only to the LG TV over HDMI, which speaks
+  CEC rather than DDC, as on the Mac. The USB-C monitor shows up only as two
+  "USB Billboard" devices — alt-mode never negotiated, so no video at all on
+  that port: the board's USB4 port carries only the Intel iGPU's video,
+  which is disabled, and the 5090 does not feed it. On HDMI to the 5090 the
+  HG560T34 answered, and two Windows backend defects showed and are fixed:
+  every read-back straight after a write failed with an I²C error although
+  the write had landed (the backend now owes the specified 50 ms after a
+  write, through `Pacer`), and the monitor was named `display-1` (the EDID
+  is now read from the registry via `EnumDisplayDevicesW`). Verified: named
+  "RTK HG560T34", brightness 90 and back to 100, each read back.
+- **Presses, with Nadir at the desk.** With Logi Options+ gone, Stream Deck
+  presses arrive on Windows: the Mini's keys 0, 1 and 5 decoded to the right
+  rows and columns, and the XL's top-left key read as row 1, column 1 under
+  `streamdeck verify`. The TourBox Elite decoded every control without a
+  protocol error: knob, dial and scroll wheel both ways, scroll wheel and
+  dial presses, top, tall, short, C1 and C2.
+- **Two of a kind now has to be chosen, never guessed.** `open_preferred`
+  took the first collection Windows listed, so with a Mini and an XL
+  attached `watch` opened the Mini while `verify` in the same minute opened
+  the XL. Nadir's rule, stated at the desk: whenever several attached
+  devices share a backend, every surface lists them all and lets you
+  choose. `roadie-cli/src/choose.rs` is that rule for the command line,
+  taken from `roadie audio`, which had it first: `--device` matches part of
+  a name, model or serial; one device in reach is used; several are
+  refused with each named and a short word to type back ("Mini", not a
+  fourteen-character serial read letter by letter). `roadie streamdeck` and
+  `roadie via` use it, verified on this desk with `--device xl`. The GUI
+  already drew one card per device and MCP already required a `deck`, so
+  neither needed changing. Audio, display, light and the Logitech `diag`
+  commands each still carry their own matcher; moving them onto `choose`
+  is the obvious next step.
+- **The Mini shows pictures now, confirmed by photograph.** Gen 1 images
+  were refused outright before. Two drivers (python-elgato-streamdeck and
+  the Rust elgato-streamdeck crate) agree on its framing and on its panel
+  being a *transpose*, where the catalogue said a quarter turn, which would
+  have mirrored every key. The first photo, at 80 percent, looked garbled;
+  it was glare, and the way to tell was a set of test patterns at 40
+  percent — solid red, green and blue, a top half, a left half and a corner
+  square — every one exactly where it belonged. The real labels then showed
+  two renderer defects the XL had hidden: short words split to be drawn
+  bigger ("MU" over "TE"), and text drawn to the edge, where the keycap's
+  curve took the tops of letters. A word is now split only when it fits
+  whole at no scale, and labels keep a margin of a tenth of the key. Test
+  patterns before labels is the order to keep: a pattern says which of
+  transfer, orientation and drawing is wrong, and a label cannot.
+- **The XL briefly disappears from enumeration** right after another
+  process releases it — twice this sitting, each time gone on a retry a
+  few seconds later, with no PnP disconnect logged. Not chased yet.
+- **Logi Options+ was uninstalled** at Nadir's request, with its plugin
+  service. After it was gone, the MX Mechanical and MX Master 3S both
+  answered on HID++: battery, DPI 1000 to 1050 and back, SmartShift ratchet
+  to free and back, and the backlight read.
+
+### 6.14 The first Linux sitting, 2026-11-03
+
+A headless Ubuntu 26.04 box (`ubuntu-3060`, kernel 7.0), reached from the
+Windows PC over Tailscale SSH with a key authorised for it. Rust and the
+build tools were installed there; the repository is public, so it clones
+with no sign-in. The first native Linux run of anything in this fork.
+
+Attached there: a Logitech Nano receiver `c534` from a cheap combo, with a
+keyboard (wpid `4023`, firmware RQK49) and a mouse (wpid `4091`, RQM70).
+
+- **`c534` was missing from the receiver table.** Solaar files it beside
+  `c537`, which was present, differing only in holding two devices. With
+  the entry, both slots enumerate.
+- **The keyboard's features:** battery (`0x1000`, read as 30 percent and
+  discharging), special keys (`0x1b00`), Fn inversion (`0x40a0`), layout
+  (`0x4520`), no backlight.
+- **The mouse's features:** reprogrammable controls (`0x1b04` v4),
+  adjustable DPI (`0x2201`), low-res wheel (`0x2130`), and no battery
+  feature at all, which is why its battery reads as unknown. DPI is not yet
+  exercised: it sleeps within seconds of stopping, and a sleeping device
+  cannot be addressed by name.
+- **A dozing device is reported as lacking features.** One feature dump in
+  four succeeded; the others said the mouse "does not expose" `0x0001`,
+  which it had just listed, or decoded an error as `InvalidFunctionId`. A
+  sleep, a busy reply, and a missing feature must not share one sentence.
+  Not fixed yet.
+- **`list` says "Unknown device" where `diag` reads "Wireless Mouse".**
+  Not fixed yet.
+- Fixed: `doctor` advised installed rules again, a Logitech line the rules
+  already carry, and opening an ASUS RGB controller; it now counts only
+  drivable nodes and explains remote sessions. `list` printed macOS notes,
+  a stale Bolt-only claim, and a dozen retry warnings. `devices` claimed
+  the family's full feature range for every Logitech device and monitor.
+- **The TourBox had no udev rule** for its serial node; it has one now,
+  scoped to `c251:2005`.
+- **The whole desk on Linux, 2026-11-04.** Moved over by a USB switch:
+  both Stream Decks (brightness, a key painted), the Cybrix 16 (VIA 12,
+  keymap read), the TourBox (found at `/dev/ttyACM0`), the Key Light Neo
+  (on, off), and the MX Mechanical and MX Master 3S over Bolt (battery,
+  DPI 1000 to 1050 and back, SmartShift round trip, backlight read).
+- **The Vocaster works on Linux through the USB path.** Section 6.8 expected
+  `snd-usb-audio` to own the vendor interface; on kernel 7.0 interface 3 had
+  no driver at all, so it claimed cleanly and input 2's gain went 9, 10, 9
+  with read-back while the audio interfaces stayed with `snd-usb-audio`. The
+  ALSA route may still be the better one; it is no longer the only one.
+- **NVIDIA's driver links no connector to its DDC bus.** It creates an I²C
+  adapter per output (`NVIDIA i2c adapter N`) and publishes no `ddc` link,
+  so every monitor was named and none reachable. The backend now falls back
+  to reading the EDID off each adapter whose parent is the connector's own
+  graphics card, never an SMBus, and keeps the one matching the kernel's
+  block. The HG560T34 over HDMI to an RTX 3060: found on `/dev/i2c-8`,
+  brightness 90 and back, capabilities read. Without the `i2c` group it now
+  says that, rather than that no line exists.
+- **`uaccess` grants nothing over SSH**, which is the normal way into a
+  headless box. Device checks there ran under `sudo`; `doctor` says so.
+- Native on Ubuntu: fmt, the CI Linux test set, non-GUI clippy and the
+  shell job all pass.
+
+### 6.15 The screen-reader pass, 2026-11-04
+
+The GUI read through the accessibility tree the way NVDA, Narrator and Orca
+do: UI Automation on Windows, AT-SPI on Linux (WSL2 Ubuntu with WSLg, an
+AT-SPI bus started by hand, and the mock agent under `ROADIE_PROFILE=dev`).
+What was learned, so nobody relearns it:
+
+- **GPUI exposes an element only with both an id and a role.** A plain
+  string child is drawn and never read; `gpui::text!` or `Text::new` makes it
+  readable, `Text::new_inaccessible` draws it without announcing it twice.
+  `ui/a11y.rs` holds the helpers: headings with levels, labels, named
+  groups, a zero-size spoken name for icon-only buttons, and two sliders
+  that take focus, keys and assistive-technology steps.
+- **`aria_selected` on a button removes its Invoke pattern** in AccessKit,
+  so a selected card could not be pressed through UI Automation. Selection
+  on a button is `.toggled()`; the library button's `.selected()` is visual
+  only and says nothing to a screen reader unless `.toggled()` goes with it.
+- **GPUI has no disabled state for assistive technology.** A disabled
+  control simply drops out of the Tab order, so "unavailable" travels in its
+  name ("Invert scroll direction, unavailable").
+- **gpui-component's own pieces are partly unreachable**, and are worked
+  around here rather than patched upstream. The settings sidebar's entries
+  have no role and take no focus, so the Settings window draws its own page
+  tabs and hides the library sidebar with `display: none` (zero width alone
+  left its search field in the Tab order; the search is gone with it). Its
+  `SettingField::switch` has no name, so every settings switch is
+  `settings::switch_item`. Setting titles and descriptions are drawn as
+  text nothing reads, so each control carries its own name and description.
+  The library `Select` cannot be named, so each sits in a named group.
+- **The update-consent dialog** is a dialog with its question as its name
+  and its terms as its description.
+- **A fresh install locked its whole window behind a configuration error.**
+  The GUI writes its first config before its first connect, and a reload
+  with no agent was reported as refused. It is now owed to the next
+  connection (`services/ipc.rs`, `undeliverable`); an agent that never comes
+  is still reported by the unreachable frame.
+- **High contrast.** `themes/high-contrast.json` is a black-and-white pair
+  with yellow (dark) or deep blue (light) for selection. It replaces the
+  chosen themes when Settings, Appearance, High contrast is On, or when the
+  OS asks for it: Windows contrast themes (`SPI_GETHIGHCONTRAST`), GNOME's
+  high-contrast switch or a `HighContrast` GTK theme, macOS Increase
+  Contrast. `theme::accent` follows it, so selection and focus outlines
+  take the pair's highlight instead of the brand blue.
+- **Text size.** The interface scale multiplies by Windows' "Make text
+  bigger" and GNOME's text scaling factor, read once at launch.
+- **Settings search** is the app's own, above the page tabs: it narrows the
+  tabs to pages whose title or settings match. Each page's setting titles
+  are listed in `settings_pages`, beside the pages; keep them in step.
+
+**Orca, driven from the keyboard.** Orca runs in the WSL Ubuntu with its
+debug log on, the app under X11 (`WAYLAND_DISPLAY` unset) so `xdotool` can
+type into it, and the mock agent. Everything Orca would have said is in the
+log as `SPEECH OUTPUT`. That found what tree audits could not:
+
+- **Focus was lost on every page change.** Opening a device, or leaving one,
+  removed the focused control; Orca went silent and Tab had nowhere to start.
+  The main window now moves focus to the new page's title (`PageFocus`), and
+  the desk focuses its heading when it opens.
+- **A GPUI focus handle is not a Tab stop unless it says so.** Every slider
+  in `ui/a11y.rs` was focusable and never reached by Tab.
+- **Remapping a button** now moves focus from the button to its current
+  action, and back there when the action list closes.
+- **The main window rendered no dialog layer**, so Rename, Delete and both
+  profile confirmations opened nothing for anyone. The library draws dialogs
+  only where an app adds `Root::render_dialog_layer`. Their titles and
+  descriptions are now headings and labels; the rename dialog draws its own
+  Save and Cancel, since `button_props` alone draws none there.
+- **The device menu opened on a mouse press only.** `ui::components::MenuButton`
+  opens the same library menu from Enter, Space and an assistive press, and
+  returns focus to the button when it closes.
+- **A duplicate accessibility id panics a debug build** (release drops the
+  node). `gpui::text!` takes its id from the call site, so the same helper
+  drawn twice under one parent collides; the light panel's two slider cards
+  did. Give such text an explicit id, or leave a caption that repeats a
+  control's name unexposed.
+- **gpui-component moved to the rev that fixed its input** (`4abf41ca`,
+  "input: align accessibility semantics with editor focus", in what is now
+  `longbridge/gpui-kit`). Its text fields used to focus an inner element
+  with no node, so Orca announced the window; they now read "Search
+  settings entry". Its `Select` takes `accessibility_label` and says its
+  value, so the group workaround is gone, and its `Root` draws dialogs
+  itself. The move took GPUI from the zed git branch to the exactly pinned
+  `gpui-pre` crate, and with it `swr-gpui-pre` and `gpui-updater-pre` 0.4.4.
+  The updater's status became non-exhaustive.
+- **Rebuilding a page left focus on nothing** with the new library, so
+  Settings owns a focus handle per page tab and gives the chosen tab focus
+  back on the next frame.
+- **A dialog builder runs on every frame.** The rename dialog focused its
+  name field in the builder, so focus moved by Tab came straight back; the
+  field is now focused once, when it opens.
+- **High contrast was checked on screen** with screenshots: forced on
+  Linux and Windows, turned on from a `HighContrast` GTK theme on Linux,
+  and followed when Windows' own high contrast was switched on (and back
+  off). Black or white pages, as designed.
+- **A Linux kernel without the hidraw class** (WSL, containers) made every
+  device list fail with "No such file or directory"; `roadie-hid` now
+  lists no devices there. The CLI's own tests caught it, run in WSL.
+- **Tab in the rename dialog** walks the field, Cancel and Save through
+  focus handles the dialog owns, since a text field binds Tab to indent.
+- **High contrast draws card edges** and swaps the status colours for ones
+  that keep 3:1 on its black or white page (`theme::status_connected` and
+  siblings).
+
+The T3 Code app on this PC brings no Linux of its own: its `wsl-runtime` is
+its server, installed into WSL. WSL with WSLg is the Linux to test in.
+
+Windows audits and the Orca run both came back clean on the home window,
+the desk, the mouse tabs, Settings and Add Device. Real NVDA (portable
+2026.3, silent synth, `--debug-logging`, keys sent from a script) then
+read the update dialog, the home window, a keyboard's lighting page
+(colours by name, the checked one said) and every Settings tab, switch
+and slider as intended. Windows Magnifier (full screen, 5x) was read back
+through `MagGetFullscreenTransform` after every Tab: its view followed
+focus onto each control, home to lighting swatches. Not yet tried by a
+person on NVDA or Narrator.
+
+- **NVDA started after the window has focus hears nothing.** GPUI's
+  Windows backend shows and activates the window before it builds the
+  AccessKit adapter, drops that `WM_ACTIVATE`, and seeds the adapter from
+  `GetForegroundWindow()` — measured 30 ms before the window actually came
+  to the front. The adapter then believes the window is unfocused and no
+  focus events are raised until the window is switched away from and back.
+  Fixed here by opening every window hidden on Windows
+  (`windows::SHOW_ON_OPEN`) and letting the `activate_window` that follows
+  show it, so the activation lands after the adapter exists. The root
+  cause is upstream in `gpui_windows` (zed-industries/zed); a drafted
+  issue waits for Nadir's go-ahead, and `SHOW_ON_OPEN` can go once it is
+  fixed there.
+- **Two OpenRoadie windows confuse a scripted NVDA run:** pick the window
+  by process and confirm it is the foreground window before sending keys.
+- **A full Orca keyboard pass on Linux** (home, every mouse tab, Settings
+  page by page, the desk, Add Device) found three gaps, now fixed: the
+  DPI row's "Add" and its icon-only remove buttons said nothing of
+  presets; the Assets buttons were a bare "Refresh", "Clear" and "Open";
+  and AccessKit's Linux adapter drops a combo box's text value, so Orca
+  never heard a dropdown's choice (`a11y::select_name` puts it in the name
+  on Linux only — NVDA reads the value itself). The Linux Permissions page
+  is a status with no Tab stop; Orca's review commands read it.
+- **`/sys/bus/usb` is absent in WSL** as `/sys/class/hidraw` is, and the
+  Focusrite listing failed there the same way; it now lists nothing.
+- **Narrator, which keeps no log, was heard instead:** a WASAPI loopback
+  recorder captured the speakers while keys were sent, and Windows speech
+  recognition transcribed it (scratchpad scripts `loopback.cs` and
+  `narrator-test.ps1`; recording its ETW provider needs an administrator).
+  Home, a keyboard page, Settings and the desk all read. It found one gap:
+  Narrator names only the innermost group it enters, so two decks'
+  "Screen brightness" and two inputs' "Gain" sounded alike. Those inner
+  groups now carry the deck or input name.
+- **The AT-SPI audit over every screen** (each mock device and tab, the
+  desk, every Settings page, Add Device, the device menu) found every
+  control named. One library gap remains: gpui-kit's component `Button`
+  never marks its node disabled (`base::Button` does), so a disabled one
+  reads as enabled in review mode; Tab skips it either way. It is in the
+  drafted gpui-kit issue. Menu items flag as unfocusable in that audit
+  because a menu moves focus by active descendant; Orca reads them.
+- **macOS, on a Mac Studio over SSH** (Rust 1.98 installed beside its default
+  1.87, never replacing it): Clippy and all 2,190 tests pass on both branches.
+  A Swift script run inside Terminal, which holds Accessibility there, pressed
+  Tab and read the focused element the way VoiceOver does. The tree was right
+  from the start, but asking the app or window for `AXFocusedUIElement` got
+  the window back: gpui never installs AccessKit's window focus forwarder.
+  `platform::os::forward_window_focus` installs it at startup; focus then
+  reads Grid, List, Carousel, each device, the page heading, the tabs and every
+  button binding. Opening windows hidden is not needed on macOS (tested).
+  `cargo run`'s dev bundle failed there compiling the `.icon` app icon, so the
+  binary was run directly for the focus checks.
+- **VoiceOver's speech, heard after all:** a ScreenCaptureKit recorder
+  (scratchpad `sck-record.swift`, Terminal already holds Screen & System
+  Audio Recording) captured the speakers, and faster-whisper in WSL
+  transcribed it far better than Windows speech recognition, which mangles
+  fast synthetic speech. With OpenRoadie run as a bundle (a bare binary from
+  Terminal confused VoiceOver) and nothing else in front, VoiceOver read each
+  device, its status and its More options button. Whisper also turned the
+  Narrator desk recording into clean text: both decks and both inputs by name.
+  VoiceOver's own `last phrase` AppleScript needs a root-owned switch file
+  only VoiceOver Utility can create, behind the Mac password.
 
 ## 7. What a session can do with nobody at the desk
 

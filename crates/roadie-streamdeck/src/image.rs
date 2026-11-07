@@ -7,25 +7,24 @@
 //! [`format`](crate::model::KeyScreens::format) — needs an imaging library
 //! and belongs to a host layer, not to a pure protocol crate.
 //!
-//! Only [`Generation::Gen2`] framing is implemented. Gen 1 hardware uses a
-//! different, larger packet with its own bitmap paging, and this crate
-//! refuses it explicitly rather than emitting packets that would be wrong;
-//! see [`ProtocolError::ImageFramingUnsupported`].
+//! Each model's [`ImageFraming`] picks the packet shape. The original 2015
+//! Stream Deck's is refused explicitly rather than emitted wrong; see
+//! [`ProtocolError::ImageFramingUnsupported`].
 
 use crate::ProtocolError;
-use crate::model::{Generation, Model};
+use crate::model::{ImageFraming, Model};
 
-/// Total size of one [`Generation::Gen2`] image output report, report ID and
+/// Total size of one [`ImageFraming::Gen2`] image output report, report ID and
 /// header included.
 pub const GEN2_PACKET_LEN: usize = 1024;
 
-/// Size of the [`Generation::Gen2`] image packet header.
+/// Size of the [`ImageFraming::Gen2`] image packet header.
 const GEN2_HEADER_LEN: usize = 8;
 
-/// Image bytes carried by one [`Generation::Gen2`] packet.
+/// Image bytes carried by one [`ImageFraming::Gen2`] packet.
 const GEN2_PAYLOAD_LEN: usize = GEN2_PACKET_LEN - GEN2_HEADER_LEN;
 
-/// Largest image the [`Generation::Gen2`] framing can address.
+/// Largest image the [`ImageFraming::Gen2`] framing can address.
 ///
 /// The page number is a 16-bit wire field, so pages `0..=u16::MAX` are all
 /// that can be named. No real key image comes close — a 96×96 JPEG is tens of
@@ -48,7 +47,7 @@ const GEN2_MAX_IMAGE_LEN: usize = GEN2_PAYLOAD_LEN * (u16::MAX as usize + 1);
 ///
 /// - [`ProtocolError::ScreenlessModel`] if the model has no key screens.
 /// - [`ProtocolError::KeyOutOfRange`] if `key` is not a key on this model.
-/// - [`ProtocolError::ImageFramingUnsupported`] for [`Generation::Gen1`].
+/// - [`ProtocolError::ImageFramingUnsupported`] for the original Stream Deck.
 /// - [`ProtocolError::ImageTooLarge`] if `image` needs more pages than the
 ///   wire's 16-bit page counter can name.
 pub fn key_image_packets(
@@ -56,22 +55,13 @@ pub fn key_image_packets(
     key: u16,
     image: &[u8],
 ) -> Result<Vec<Vec<u8>>, ProtocolError> {
-    if model.screens.is_none() {
+    let Some(screens) = model.screens else {
         return Err(ProtocolError::ScreenlessModel { model: model.name });
-    }
+    };
     if key >= model.key_count() {
         return Err(ProtocolError::KeyOutOfRange {
             index: key,
             count: model.key_count(),
-        });
-    }
-    if model.generation == Generation::Gen1 {
-        return Err(ProtocolError::ImageFramingUnsupported { model: model.name });
-    }
-    if image.len() > GEN2_MAX_IMAGE_LEN {
-        return Err(ProtocolError::ImageTooLarge {
-            bytes: image.len(),
-            max: GEN2_MAX_IMAGE_LEN,
         });
     }
     // Catalogued key counts are far below u8::MAX, and `key` was just bounds
@@ -80,6 +70,71 @@ pub fn key_image_packets(
         index: key,
         count: model.key_count(),
     })?;
+    match screens.framing {
+        ImageFraming::Gen2 => gen2_packets(key_byte, image),
+        ImageFraming::Gen1Mini => mini_packets(key_byte, image),
+        ImageFraming::Gen1Original => {
+            Err(ProtocolError::ImageFramingUnsupported { model: model.name })
+        }
+    }
+}
+
+/// Total size of one [`ImageFraming::Gen1Mini`] image output report.
+pub const MINI_PACKET_LEN: usize = 1024;
+
+/// Size of the [`ImageFraming::Gen1Mini`] image packet header.
+const MINI_HEADER_LEN: usize = 16;
+
+/// Image bytes carried by one [`ImageFraming::Gen1Mini`] packet.
+const MINI_PAYLOAD_LEN: usize = MINI_PACKET_LEN - MINI_HEADER_LEN;
+
+/// Largest image the Mini's 8-bit page counter can address — about 258 KB,
+/// against an 80×80 bitmap's 19,254 bytes.
+const MINI_MAX_IMAGE_LEN: usize = MINI_PAYLOAD_LEN * (u8::MAX as usize + 1);
+
+/// The Mini's framing: `02 01 page 00 last key+1`, then ten zeros.
+///
+/// Two independent drivers agree on every byte, including the two that
+/// differ from the original Stream Deck: pages count from 0 here and from 1
+/// there, and the key is one-based in both.
+fn mini_packets(key: u8, image: &[u8]) -> Result<Vec<Vec<u8>>, ProtocolError> {
+    let too_large = || ProtocolError::ImageTooLarge {
+        bytes: image.len(),
+        max: MINI_MAX_IMAGE_LEN,
+    };
+    if image.len() > MINI_MAX_IMAGE_LEN {
+        return Err(too_large());
+    }
+    let wire_key = key.checked_add(1).ok_or_else(too_large)?;
+    let mut packets = Vec::new();
+    let mut remaining = image;
+    let mut page: u8 = 0;
+    loop {
+        let take = remaining.len().min(MINI_PAYLOAD_LEN);
+        let (chunk, rest) = remaining.split_at(take);
+        let last = rest.is_empty();
+        let mut packet = Vec::with_capacity(MINI_PACKET_LEN);
+        packet.extend_from_slice(&[0x02, 0x01, page, 0x00, u8::from(last), wire_key]);
+        packet.resize(MINI_HEADER_LEN, 0);
+        packet.extend_from_slice(chunk);
+        packet.resize(MINI_PACKET_LEN, 0);
+        packets.push(packet);
+        if last {
+            return Ok(packets);
+        }
+        remaining = rest;
+        page = page.checked_add(1).ok_or_else(too_large)?;
+    }
+}
+
+/// The gen 2 framing: `02 07 key last length page`, all little-endian.
+fn gen2_packets(key_byte: u8, image: &[u8]) -> Result<Vec<Vec<u8>>, ProtocolError> {
+    if image.len() > GEN2_MAX_IMAGE_LEN {
+        return Err(ProtocolError::ImageTooLarge {
+            bytes: image.len(),
+            max: GEN2_MAX_IMAGE_LEN,
+        });
+    }
 
     let mut packets = Vec::new();
     let mut remaining = image;
@@ -236,8 +291,55 @@ mod tests {
         assert!(matches!(error, ProtocolError::ScreenlessModel { .. }));
     }
 
+    fn mini() -> &'static Model {
+        identify(ELGATO_VENDOR_ID, 0x0063).expect("the Mini is catalogued")
+    }
+
     #[test]
-    fn gen1_framing_is_refused_rather_than_guessed_at() {
+    fn a_mini_packet_header_is_the_bytes_both_reference_drivers_send() {
+        // Spelled out rather than computed: `02 01 page 00 last key+1` then
+        // ten zeros, as python-elgato-streamdeck and the Rust
+        // elgato-streamdeck crate both write it for the Mini.
+        let image = vec![0xab; 1500];
+        let packets = key_image_packets(mini(), 4, &image).expect("the Mini frames images");
+        assert_eq!(packets.len(), 2);
+        assert_eq!(
+            packets[0][..16],
+            [
+                0x02, 0x01, 0x00, 0x00, 0x00, 0x05, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+            ]
+        );
+        assert_eq!(
+            packets[1][..16],
+            [
+                0x02, 0x01, 0x01, 0x00, 0x01, 0x05, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+            ]
+        );
+        for packet in &packets {
+            assert_eq!(packet.len(), super::MINI_PACKET_LEN);
+        }
+        // 1008 bytes ride in the first packet and 492 in the second, the
+        // rest of which is padding.
+        assert!(packets[0][16..].iter().all(|byte| *byte == 0xab));
+        assert!(packets[1][16..16 + 492].iter().all(|byte| *byte == 0xab));
+        assert!(packets[1][16 + 492..].iter().all(|byte| *byte == 0));
+    }
+
+    #[test]
+    fn an_80_pixel_mini_bitmap_takes_twenty_packets_with_one_last_flag() {
+        // 54 bytes of header plus 80 × 80 × 3: the size every Mini key image is.
+        let image = vec![0; 19_254];
+        let packets = key_image_packets(mini(), 0, &image).expect("the Mini frames images");
+        assert_eq!(packets.len(), 20);
+        for (index, packet) in packets.iter().enumerate() {
+            assert_eq!(usize::from(packet[2]), index, "pages count from zero");
+            assert_eq!(packet[4], u8::from(index == 19), "only the last is last");
+            assert_eq!(packet[5], 1, "key 0 travels as 1");
+        }
+    }
+
+    #[test]
+    fn the_original_stream_deck_framing_is_refused_rather_than_guessed_at() {
         let original = identify(ELGATO_VENDOR_ID, 0x0060).expect("the original is catalogued");
         let error = key_image_packets(original, 0, &[0]).expect_err("gen 1 framing differs");
         assert!(matches!(

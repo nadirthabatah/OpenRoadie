@@ -253,8 +253,8 @@ mod tests {
         let scratch = Scratch::new("empty");
         let gathered = gather_layouts(&scratch.join("nothing-here"), &scratch.join("bundle"))
             .expect("an absent library is not a failure");
-        assert!(gathered.carried.is_empty());
-        assert!(gathered.left_over.is_empty());
+        assert_eq!(gathered.carried.len(), 0);
+        assert_eq!(gathered.left_over.len(), 0);
     }
 
     /// "It is not there" and "it is there and is not a folder" produce the
@@ -472,6 +472,6 @@ mod tests {
         let bundle = scratch.join("bundle");
         write(&config_in(&bundle), "schema_version = 1\n");
         let restored = restore_layouts(&bundle, &scratch.join("library")).expect("not a failure");
-        assert!(restored.is_empty());
+        assert_eq!(restored.len(), 0);
     }
 }

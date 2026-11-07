@@ -46,7 +46,7 @@ pub(crate) const ICON_NAME: &str = "AppIcon";
 /// The compiled asset catalog, as `actool` always names it.
 const CATALOG: &str = "Assets.car";
 
-/// Deployment target handed to `actool`; mirrors `osx_minimum_system_version`
+/// Deployment target handed to `actool`; mirrors the bundle's `osx.minimum_system_version`
 /// in `roadie-desktop/Cargo.toml`.
 const MINIMUM_MACOS: &str = "13.0";
 

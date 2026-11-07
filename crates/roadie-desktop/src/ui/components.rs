@@ -7,19 +7,19 @@
 use gpui::{
     AnyElement, App, ClickEvent, ElementId, Entity, InteractiveElement, Interactivity, IntoElement,
     ParentElement, Pixels, RenderOnce, Role, SharedString, Stateful, StatefulInteractiveElement,
-    Styled, Window, div, prelude::FluentBuilder as _, px, rgb,
+    Styled, Window, div, prelude::FluentBuilder as _, px,
 };
 use gpui_base::Button as BaseButton;
 use gpui_component::{
     Disableable, Icon, IconName, Selectable, Sizable, Size, h_flex,
     input::{Input, InputState},
+    menu::PopupMenu,
     searchable_list::SearchableListDelegate,
     select::{Select, SelectState},
-    switch::Switch,
     v_flex,
 };
 
-use super::theme::{self, ACCENT_BLUE, SelectableStyle as _, Typography as _};
+use super::theme::{self, SelectableStyle as _, Typography as _};
 
 /// A gpui-component button at the house control height.
 ///
@@ -71,6 +71,10 @@ pub(crate) fn control_select<D: SearchableListDelegate + 'static>(
 #[derive(IntoElement)]
 pub(crate) struct Toggle {
     id: ElementId,
+    /// What the switch switches, announced as its name: "Mute", "Power".
+    name: SharedString,
+    /// Read after the name and state: what turning it on does.
+    description: Option<SharedString>,
     selected: bool,
     disabled: bool,
     size: Size,
@@ -83,9 +87,11 @@ pub(crate) struct Toggle {
 type SwitchHandler = std::rc::Rc<dyn Fn(&bool, &mut Window, &mut App)>;
 
 impl Toggle {
-    pub(crate) fn new(id: impl Into<ElementId>) -> Self {
+    pub(crate) fn new(id: impl Into<ElementId>, name: impl Into<SharedString>) -> Self {
         Self {
             id: id.into(),
+            name: name.into(),
+            description: None,
             selected: false,
             disabled: false,
             size: Size::Small,
@@ -94,6 +100,12 @@ impl Toggle {
             min_width: None,
             on_change: None,
         }
+    }
+
+    #[must_use]
+    pub(crate) fn description(mut self, description: impl Into<SharedString>) -> Self {
+        self.description = Some(description.into());
+        self
     }
 
     #[must_use]
@@ -150,18 +162,87 @@ impl Sizable for Toggle {
 }
 
 impl RenderOnce for Toggle {
-    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        let label = self
+    /// Built on the unstyled base switch rather than the styled one, because
+    /// the styled switch names itself after its visible label — and the label
+    /// here is the *state* ("Not muted", "Off"). A screen reader then heard a
+    /// switch called "Off" that was on or off, with nothing saying what it
+    /// switched. Here the name is the switch's purpose and the state is the
+    /// switch's own toggled state; the state word stays on screen for anyone
+    /// reading it, drawn inaccessibly so it is not announced twice.
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let checked = self.selected;
+        let disabled = self.disabled;
+        let state_word = self
             .label
-            .unwrap_or_else(|| if self.selected { tr!("On") } else { tr!("Off") });
-        let mut toggle = Switch::new(self.id)
-            .checked(self.selected)
-            .disabled(self.disabled)
-            .with_size(self.size)
-            .label(label)
-            .color(rgb(ACCENT_BLUE));
+            .unwrap_or_else(|| if checked { tr!("On") } else { tr!("Off") });
+        let (track_width, track_height, thumb) = match self.size {
+            Size::XSmall | Size::Small => (px(28.), px(16.), px(12.)),
+            _ => (px(36.), px(20.), px(16.)),
+        };
+        let inset = px(2.);
+        let accent: gpui::Hsla = theme::accent();
+        let unchecked: gpui::Hsla = *gpui_component::ActiveTheme::theme(cx).tokens.switch;
+        let thumb_colour: gpui::Hsla = *gpui_component::ActiveTheme::theme(cx).tokens.switch_thumb;
+        let pal = theme::palette(cx);
+        let focus = window
+            .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
+            .read(cx)
+            .clone();
+        let focused = focus.is_focused(window);
+        let mut switch = gpui_base::Switch::new(self.id.clone())
+            .checked(checked)
+            .disabled(disabled)
+            // GPUI exposes no disabled state to assistive technology, so a
+            // disabled switch simply could not be focused and nothing said
+            // why. "Unavailable" travels in its name, which every screen
+            // reader says, rather than a description some say only on request.
+            .accessibility_label(if disabled {
+                tr!("%{name}, unavailable", name => self.name.clone())
+            } else {
+                self.name.clone()
+            })
+            .when_some(self.description.clone(), |switch, description| {
+                switch.aria_description(description)
+            })
+            .flex()
+            .items_center()
+            .gap_2()
+            .rounded_md()
+            .border_2()
+            .border_color(if focused { pal.text_primary } else { gpui::transparent_black() })
+            .px_0p5()
+            .child(
+                gpui_base::SwitchTrack::new((self.id.clone(), "track"))
+                    .checked(checked)
+                    .disabled(disabled)
+                    .w(track_width)
+                    .h(track_height)
+                    .rounded_full()
+                    .flex()
+                    .items_center()
+                    .border(inset)
+                    .border_color(gpui::transparent_black())
+                    .bg(if checked { accent } else { unchecked })
+                    .when(disabled, |track| track.opacity(0.5))
+                    .child(
+                        gpui_base::SwitchThumb::new(checked)
+                            .disabled(disabled)
+                            .rounded_full()
+                            .size(thumb)
+                            .bg(thumb_colour)
+                            .when(checked, |thumb_el| {
+                                thumb_el.ml(track_width - thumb - inset * 2)
+                            }),
+                    ),
+            )
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(if disabled { pal.text_muted } else { pal.text_primary })
+                    .child(gpui::Text::new_inaccessible(state_word)),
+            );
         if let Some(handler) = self.on_change {
-            toggle = toggle.on_click(move |selected, window, cx| handler(selected, window, cx));
+            switch = switch.on_change(move |next, _event, window, cx| handler(&next, window, cx));
         }
         h_flex()
             .items_center()
@@ -170,7 +251,7 @@ impl RenderOnce for Toggle {
                 row.min_w(width).justify_center()
             })
             .when_some(self.icon, |row, icon| row.child(Icon::new(icon).size_3()))
-            .child(toggle)
+            .child(switch)
     }
 }
 
@@ -418,7 +499,7 @@ impl StatefulInteractiveElement for ProfileTab {}
 impl RenderOnce for ProfileTab {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let pal = theme::palette(cx);
-        let accent = rgb(ACCENT_BLUE);
+        let accent = theme::accent();
         let has_delete = self.delete.is_some();
         let label = self.label;
         self.base
@@ -433,11 +514,7 @@ impl RenderOnce for ProfileTab {
             .items_center()
             .rounded_full()
             .border_1()
-            .border_color(if self.selected {
-                accent.into()
-            } else {
-                pal.border
-            })
+            .border_color(if self.selected { accent } else { pal.border })
             .text_caption()
             .text_color(if self.selected {
                 pal.text_primary
@@ -549,6 +626,130 @@ impl RenderOnce for PresetChip {
     }
 }
 
+type MenuBuilder =
+    std::rc::Rc<dyn Fn(PopupMenu, &mut Window, &mut gpui::Context<PopupMenu>) -> PopupMenu>;
+
+/// A button that opens a popup menu from the pointer, the keyboard and
+/// assistive technology alike.
+///
+/// gpui-component's `dropdown_menu` opens on a mouse press and nothing else:
+/// Enter and Space did nothing, and the trigger carried no press action, so a
+/// screen reader could not open it either. This keeps the library's menu,
+/// which is itself keyboard-driven and announced, and opens it from a keyed
+/// flag the button's click also sets.
+#[derive(IntoElement)]
+pub(crate) struct MenuButton {
+    id: ElementId,
+    trigger: gpui_component::button::Button,
+    anchor: gpui::Anchor,
+    builder: MenuBuilder,
+}
+
+#[derive(Default)]
+struct MenuButtonState {
+    open: bool,
+    menu: Option<Entity<PopupMenu>>,
+    /// What had focus when the menu opened, the button itself; it gets focus
+    /// back when the menu closes, or Tab has nowhere to start from.
+    restore: Option<gpui::FocusHandle>,
+}
+
+impl MenuButton {
+    pub(crate) fn new(
+        id: impl Into<ElementId>,
+        trigger: gpui_component::button::Button,
+        anchor: gpui::Anchor,
+        builder: impl Fn(PopupMenu, &mut Window, &mut gpui::Context<PopupMenu>) -> PopupMenu + 'static,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            trigger,
+            anchor,
+            builder: std::rc::Rc::new(builder),
+        }
+    }
+}
+
+impl RenderOnce for MenuButton {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| MenuButtonState::default());
+        let open = state.read(cx).open;
+        let builder = self.builder;
+        // The pointer opens the popover itself, on mouse down. A keyboard
+        // click has no mouse down, so it opens it here; an assistive press is
+        // delivered as a mouse down, and having a click at all is what gives
+        // the button a press action to offer.
+        let trigger = self.trigger.on_click({
+            let state = state.clone();
+            move |event, window, cx| {
+                let focused = window.focused(cx);
+                let keyboard = event.is_keyboard();
+                state.update(cx, |state, cx| {
+                    state.restore = focused;
+                    if keyboard {
+                        state.open = true;
+                        cx.notify();
+                    }
+                });
+            }
+        });
+        gpui_component::popover::Popover::new(SharedString::from(format!(
+            "menu-button:{}",
+            self.id
+        )))
+        .appearance(false)
+        .overlay_closable(false)
+        .anchor(self.anchor)
+        .open(open)
+        .on_open_change({
+            let state = state.clone();
+            move |open, _, cx| {
+                state.update(cx, |state, cx| {
+                    state.open = *open;
+                    cx.notify();
+                });
+            }
+        })
+        .trigger(trigger)
+        .content(move |_, window, cx| {
+            // Built once per opening, as the library's dropdown does: the
+            // content closure runs on every render.
+            if let Some(menu) = state.read(cx).menu.clone() {
+                return menu;
+            }
+            let builder = builder.clone();
+            let menu = PopupMenu::build(window, cx, move |menu, window, cx| {
+                builder(menu, window, cx)
+            });
+            gpui::Focusable::focus_handle(menu.read(cx), cx).focus(window, cx);
+            let popover = cx.entity();
+            let dismissed = state.clone();
+            let menu_for_focus = menu.clone();
+            window
+                .subscribe(&menu, cx, move |_, _: &gpui::DismissEvent, window, cx| {
+                    popover.update(cx, |popover, cx| popover.dismiss(window, cx));
+                    let restore = dismissed.update(cx, |state, cx| {
+                        state.open = false;
+                        state.menu = None;
+                        cx.notify();
+                        state.restore.take()
+                    });
+                    // Only when the menu still holds focus: an item that opened
+                    // a dialog has already moved it where it belongs.
+                    let menu_focus = gpui::Focusable::focus_handle(menu_for_focus.read(cx), cx);
+                    if let Some(restore) = restore
+                        && (window.focused(cx).is_none() || menu_focus.contains_focused(window, cx))
+                    {
+                        window.focus(&restore, cx);
+                    }
+                })
+                .detach();
+            state.update(cx, |state, _| state.menu = Some(menu.clone()));
+            menu
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{cell::Cell, rc::Rc};
@@ -577,7 +778,7 @@ mod tests {
                 .size(px(100.))
                 .on_click(move |_, _, _| parent_clicks.set(parent_clicks.get() + 1))
                 .child(
-                    Toggle::new("keyboard-toggle")
+                    Toggle::new("keyboard-toggle", "Keyboard switch")
                         .selected(self.selected)
                         .disabled(self.disabled)
                         .on_change(move |selected, _, _| changes.set(Some(*selected))),

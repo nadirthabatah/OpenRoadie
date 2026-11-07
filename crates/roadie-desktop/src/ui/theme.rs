@@ -14,9 +14,9 @@
 
 #[cfg(test)]
 use gpui::rgb;
-use gpui::{App, FontWeight, Hsla, Pixels, Rems, Rgba, Styled, Window, hsla, px, relative, rems};
+use gpui::{App, FontWeight, Hsla, Pixels, Rems, Rgba, Styled, Window, px, relative, rems};
 use gpui_component::{ActiveTheme as _, Theme, ThemeMode, ThemeRegistry};
-use roadie_core::config::{Appearance, UiScale};
+use roadie_core::config::{Appearance, Contrast, UiScale};
 
 use crate::state::AppState;
 
@@ -26,15 +26,72 @@ use super::spacing::DynamicSpacing;
 // this app does — it cannot depend on this crate, and a local copy is how the
 // ring ended up with a blue of its own. Re-exported so screens keep reading it
 // off `theme::`, beside the status hues and the appearance-derived [`Palette`].
-pub use roadie_ui::color::{ACCENT_BLUE, accent};
+pub use roadie_ui::color::ACCENT_BLUE;
 
-/// Status colours for the connectivity readouts. Fixed like the accent, but the
-/// overlay draws no status, so they stay with the app that does.
+/// The accent the app paints with now: the brand blue, or while contrast is
+/// high the high-contrast pair's own highlight, because the brand blue on
+/// white falls short of the 3:1 a focus or selection outline needs. Set only
+/// by [`apply_from_settings`], which owns the theme, and read every paint.
+static ACCENT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(ACCENT_BLUE);
+
+/// The current accent; see [`ACCENT`].
+#[must_use]
+pub fn accent() -> Hsla {
+    gpui::rgb(ACCENT.load(std::sync::atomic::Ordering::Relaxed)).into()
+}
+
+/// Status colours for the connectivity readouts, as drawn outside high
+/// contrast. The overlay draws no status, so they stay with the app that does.
+/// Read them through [`status_connected`] and its siblings, which swap in
+/// colours that keep 3:1 against a high-contrast page.
 pub const STATUS_CONNECTED: u32 = 0x0022_c55e;
 pub const STATUS_CONNECTING: u32 = 0x00ea_b308;
 pub const STATUS_OFFLINE: u32 = 0x006b_7280;
 /// Ring color for a device the user disabled ("Manage this device" off).
 pub const STATUS_DISABLED: u32 = 0x00ef_4444;
+
+/// Which contrast the theme was last applied in: 0 normal, 1 high contrast
+/// on black, 2 high contrast on white. Set only by [`apply_from_settings`].
+static CONTRAST_MODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// Pick a status colour for the contrast the theme is in.
+fn status(normal: u32, on_black: u32, on_white: u32) -> u32 {
+    match CONTRAST_MODE.load(std::sync::atomic::Ordering::Relaxed) {
+        1 => on_black,
+        2 => on_white,
+        _ => normal,
+    }
+}
+
+/// Whether the high-contrast theme is the one on show.
+#[must_use]
+pub fn is_high_contrast() -> bool {
+    CONTRAST_MODE.load(std::sync::atomic::Ordering::Relaxed) != 0
+}
+
+/// Connected, charged, granted.
+#[must_use]
+pub fn status_connected() -> u32 {
+    status(STATUS_CONNECTED, 0x0000_ff00, 0x0000_6400)
+}
+
+/// Connecting, low, needs attention.
+#[must_use]
+pub fn status_connecting() -> u32 {
+    status(STATUS_CONNECTING, 0x00ff_ff00, 0x0080_5000)
+}
+
+/// Offline or unknown.
+#[must_use]
+pub fn status_offline() -> u32 {
+    status(STATUS_OFFLINE, 0x00c0_c0c0, 0x0040_4040)
+}
+
+/// Disabled, critical, failed.
+#[must_use]
+pub fn status_disabled() -> u32 {
+    status(STATUS_DISABLED, 0x00ff_6060, 0x00b0_0000)
+}
 
 /// Sizes that several components need to agree on.
 pub const HEADER_H: f32 = 64.;
@@ -242,19 +299,32 @@ pub fn palette(cx: &App) -> Palette {
 /// they must be embedded to be selectable).
 const ROADIE_THEME_JSON: &str = include_str!("../../themes/roadie.json");
 
+/// The black-and-white pair worn whenever high contrast is on, in place of
+/// whatever themes the user picked (see [`apply_from_settings`]).
+const HIGH_CONTRAST_THEME_JSON: &str = include_str!("../../themes/high-contrast.json");
+
 // Defines `static UPSTREAM_THEME_JSON: &[&str]` from build-time-embedded copies.
 include!(concat!(env!("OUT_DIR"), "/builtin_themes.rs"));
 
 /// The default brand theme names — slots [`apply_from_settings`] falls back to.
 pub const ROADIE_LIGHT: &str = "OpenRoadie Light";
 pub const ROADIE_DARK: &str = "OpenRoadie Dark";
+/// The high-contrast slots, chosen over the user's themes while contrast is high.
+pub const HIGH_CONTRAST_LIGHT: &str = "OpenRoadie High Contrast Light";
+pub const HIGH_CONTRAST_DARK: &str = "OpenRoadie High Contrast Dark";
+/// The highlights `themes/high-contrast.json` selects with, as [`ACCENT`] takes them.
+const HIGH_CONTRAST_LIGHT_ACCENT: u32 = 0x0000_009f;
+const HIGH_CONTRAST_DARK_ACCENT: u32 = 0x00ff_ff00;
 
 /// Register every bundled theme into the [`ThemeRegistry`]. Call once at
 /// startup, after `gpui_component::init` (which seeds the registry global). Our
 /// brand theme loads first; the upstream themes follow.
 pub fn register_builtin_themes(cx: &mut App) {
     let registry = ThemeRegistry::global_mut(cx);
-    for json in std::iter::once(ROADIE_THEME_JSON).chain(UPSTREAM_THEME_JSON.iter().copied()) {
+    for json in [ROADIE_THEME_JSON, HIGH_CONTRAST_THEME_JSON]
+        .into_iter()
+        .chain(UPSTREAM_THEME_JSON.iter().copied())
+    {
         if let Err(error) = registry.load_themes_from_str(json) {
             tracing::warn!(%error, "failed to load a bundled theme");
         }
@@ -265,9 +335,11 @@ fn rem_size(scale: UiScale) -> Pixels {
     px(BASE_REM_SIZE * f32::from(scale.percent()) / 100.)
 }
 
-/// Apply one semantic interface scale to a window.
+/// Apply one semantic interface scale to a window, on top of the operating
+/// system's own text size so a reader who enlarged text everywhere gets it
+/// here too.
 pub(crate) fn apply_scale(window: &mut Window, scale: UiScale) {
-    window.set_rem_size(rem_size(scale));
+    window.set_rem_size(rem_size(scale) * crate::platform::os::text_scale());
 }
 
 /// Apply the stored interface scale to one desktop window.
@@ -295,12 +367,13 @@ pub fn apply_ui_scale(window: &mut Window, cx: &App) {
 /// appearance is read directly and it repaints; pass `None` from a settings
 /// edit (no window in hand) — every open window is refreshed instead.
 pub fn apply_from_settings(window: Option<&mut Window>, cx: &mut App) {
-    let (appearance, light_name, dark_name, radius) = AppState::try_read(cx).map_or_else(
-        || (Appearance::default(), None, None, None),
+    let (appearance, contrast, light_name, dark_name, radius) = AppState::try_read(cx).map_or_else(
+        || (Appearance::default(), Contrast::default(), None, None, None),
         |state| {
             let s = state.app_settings();
             (
                 s.appearance,
+                s.contrast,
                 s.theme_light.clone(),
                 s.theme_dark.clone(),
                 s.ui_radius,
@@ -323,6 +396,18 @@ pub fn apply_from_settings(window: Option<&mut Window>, cx: &mut App) {
     let os_appearance = window
         .as_ref()
         .map_or_else(|| cx.window_appearance(), |w| w.appearance());
+
+    // High contrast replaces the chosen pair outright: no other theme is
+    // guaranteed to keep every text and border legible.
+    let high_contrast = contrast == Contrast::High || crate::platform::os::high_contrast();
+    let (light_name, dark_name) = if high_contrast {
+        (
+            Some(HIGH_CONTRAST_LIGHT.to_owned()),
+            Some(HIGH_CONTRAST_DARK.to_owned()),
+        )
+    } else {
+        (light_name, dark_name)
+    };
 
     // Pull the chosen configs out of the registry before borrowing the Theme
     // mutably (both live as globals).
@@ -353,6 +438,22 @@ pub fn apply_from_settings(window: Option<&mut Window>, cx: &mut App) {
         Appearance::Dark => ThemeMode::Dark,
     };
     Theme::change(mode, window, cx);
+    CONTRAST_MODE.store(
+        match (high_contrast, mode.is_dark()) {
+            (false, _) => 0,
+            (true, true) => 1,
+            (true, false) => 2,
+        },
+        std::sync::atomic::Ordering::Relaxed,
+    );
+    ACCENT.store(
+        match (high_contrast, mode.is_dark()) {
+            (false, _) => ACCENT_BLUE,
+            (true, true) => HIGH_CONTRAST_DARK_ACCENT,
+            (true, false) => HIGH_CONTRAST_LIGHT_ACCENT,
+        },
+        std::sync::atomic::Ordering::Relaxed,
+    );
 
     let theme = Theme::global_mut(cx);
     normalize_theme_text_contrast(theme);
@@ -370,13 +471,13 @@ pub fn apply_from_settings(window: Option<&mut Window>, cx: &mut App) {
 /// that it stays derived from the brand colour.
 #[must_use]
 pub fn accent_tint() -> Hsla {
-    hsla(0.6, 0.9, 0.6, 0.12)
+    accent().opacity(0.12)
 }
 
 /// [`accent_tint`] deepened for hover on an already-selected row.
 #[must_use]
 pub fn accent_tint_hover() -> Hsla {
-    hsla(0.6, 0.9, 0.6, 0.18)
+    accent().opacity(0.18)
 }
 
 /// Chaining helpers expressing the single "selected" decision — accent border

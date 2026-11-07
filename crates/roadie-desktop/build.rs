@@ -170,8 +170,11 @@ fn locate_themes_dir() -> PathBuf {
     // The themes live at the repo root next to (not inside) the gpui-component
     // crate, so walk up from its manifest until a populated `themes/` appears.
     // `gpui-component-assets` shares the same checkout root, so either match
-    // converges on the same directory.
-    for manifest in manifest_paths(&metadata).filter(|p| p.contains("gpui-component")) {
+    // converges on the same directory. The repository was renamed gpui-kit,
+    // which names the checkout; either name finds it.
+    for manifest in
+        manifest_paths(&metadata).filter(|p| p.contains("gpui-component") || p.contains("gpui-kit"))
+    {
         for ancestor in Path::new(manifest).ancestors() {
             let themes = ancestor.join("themes");
             if themes.join("catppuccin.json").is_file() {
