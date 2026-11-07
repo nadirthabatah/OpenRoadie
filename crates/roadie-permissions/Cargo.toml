@@ -21,7 +21,7 @@ tracing = { workspace = true }
 
 # Only for the Logitech vendor ID — `roadie-core` is pure types, no I/O.
 [target.'cfg(target_os = "linux")'.dependencies]
-roadie-core = { version = "0.8.1", path = "../roadie-core" }
+roadie-core = { version = "0.9.0", path = "../roadie-core" }
 
 [lints]
 workspace = true

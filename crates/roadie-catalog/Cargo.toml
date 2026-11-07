@@ -11,13 +11,13 @@ keywords = ["hid", "usb", "peripherals", "detection", "catalog"]
 categories = ["hardware-support"]
 
 [dependencies]
-roadie-device-registry = { path = "../roadie-device-registry", version = "0.8.1" }
-roadie-keylight = { path = "../roadie-keylight", version = "0.8.1", default-features = false }
-roadie-streamdeck = { path = "../roadie-streamdeck", version = "0.8.1" }
+roadie-device-registry = { path = "../roadie-device-registry", version = "0.9.0" }
+roadie-keylight = { path = "../roadie-keylight", version = "0.9.0", default-features = false }
+roadie-streamdeck = { path = "../roadie-streamdeck", version = "0.9.0" }
 # Protocol half only: this crate is on the wasm portability list, and the
 # TourBox host half opens serial ports.
-roadie-tourbox = { path = "../roadie-tourbox", version = "0.8.1", default-features = false }
-roadie-via = { path = "../roadie-via", version = "0.8.1" }
+roadie-tourbox = { path = "../roadie-tourbox", version = "0.9.0", default-features = false }
+roadie-via = { path = "../roadie-via", version = "0.9.0" }
 
 [lints]
 workspace = true

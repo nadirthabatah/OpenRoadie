@@ -37,7 +37,7 @@ members = [
 default-members = ["crates/roadie"]
 
 [workspace.package]
-version = "0.8.1"
+version = "0.9.0"
 edition = "2024"
 # Tracks current stable rather than trailing it. OpenRoadie ships as an app —
 # prebuilt installers, and no crate here has an external reverse dependency —
@@ -51,8 +51,8 @@ authors = ["AprilNEA <dev@aprilnea.me>", "Nadir Thabatah <nadirthabatah@gmail.co
 description = "Local-first control for the peripherals on your desk: Logitech HID++, Elgato Stream Decks, QMK/VIA macro pads, and UVC webcams"
 
 [workspace.dependencies]
-hidpp = { package = "roadie-hidpp", path = "crates/roadie-hidpp", version = "0.8.1" }
-roadie-device-registry = { path = "crates/roadie-device-registry", version = "0.8.1" }
+hidpp = { package = "roadie-hidpp", path = "crates/roadie-hidpp", version = "0.9.0" }
+roadie-device-registry = { path = "crates/roadie-device-registry", version = "0.9.0" }
 async-hid = { package = "openlogi-async-hid", version = "=0.5.3-openlogi.1" }
 interprocess = { version = "2", features = ["tokio"] }
 # The agent <-> GUI RPC layer itself, over the `interprocess` transport above.

@@ -9,7 +9,7 @@ authors.workspace = true
 description = "The tarpc contract and local-socket transport shared by the OpenRoadie agent and GUI."
 
 [dependencies]
-roadie-core = { path = "../roadie-core", version = "0.8.1" }
+roadie-core = { path = "../roadie-core", version = "0.9.0" }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tarpc = { workspace = true }

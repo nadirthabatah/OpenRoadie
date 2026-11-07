@@ -11,7 +11,7 @@ keywords = ["ddc", "ddc-ci", "monitor", "brightness", "i2c"]
 categories = ["hardware-support", "os"]
 
 [dependencies]
-roadie-ddc = { path = "../roadie-ddc", version = "0.8.1" }
+roadie-ddc = { path = "../roadie-ddc", version = "0.9.0" }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 

@@ -9,8 +9,8 @@ authors.workspace = true
 description = "OS-level mouse-event hook for OpenRoadie. macOS via CGEventTap; Linux via evdev+uinput; Windows via WH_MOUSE_LL."
 
 [dependencies]
-roadie-core = { path = "../roadie-core", version = "0.8.1" }
-roadie-inject = { path = "../roadie-inject", version = "0.8.1" }
+roadie-core = { path = "../roadie-core", version = "0.9.0" }
+roadie-inject = { path = "../roadie-inject", version = "0.9.0" }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 

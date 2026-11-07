@@ -7,6 +7,125 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-05
+
+### Added
+
+- *(gui)* the desk panel shows every family on the desk ([#14](https://github.com/nadirthabatah/OpenRoadie/pull/14))
+- *(cli)* roadie audio, with mcp parity and the phantom power gate
+- *(scarlett)* reach a focusrite control channel over usb
+- *(keylight)* drive the key light neo over its usb data port
+- *(hid)* accept via protocol 12 keyboards alongside 9
+- *(cli)* drive tourbox controllers over their serial port
+- *(scarlett)* the ALSA control names, which are the whole Linux mechanism
+- *(scarlett)* the read and write encodings, and the order a change happens in
+- *(scarlett)* the Focusrite control protocol, and the gate on phantom power
+- *(gui)* a monitors-and-lights window, and the panel behind it
+- *(ipc)* the desk beyond HID++ crosses the socket
+- *(cli)* doctor knows about monitors, and stops overclaiming
+- *(keylight)* Elgato Key Lights, which are on the network rather than the desk
+- *(cli)* monitors reach the MCP server and the device survey
+- *(cli)* roadie display, the bezel menu from the keyboard
+- *(display)* the host transports, so DDC can reach an actual monitor
+- *(doctor)* say which build and which platform, in the report meant to be pasted
+- *(streamdeck)* say when a painted layout's actions are not bound
+- *(mcp)* let an assistant edit one key of a saved layout
+- *(streamdeck)* build a layout without ever opening a text editor
+- *(cli)* --json on devices and doctor, sharing one rendering with MCP
+- *(mcp)* give an assistant the rest of what the CLI can do
+- *(doctor)* say why nothing is being found, and what to do about it
+- *(profile)* carry the whole setup, not the half that fits in one file
+- *(via)* read and change what every key sends on a QMK macro pad
+- *(mcp)* let an assistant answer "what do I have plugged in"
+- *(devices)* one list for everything plugged in, whoever made it
+- *(streamdeck)* make the keys do something
+- *(streamdeck)* give a deck's layout somewhere to live
+- *(streamdeck)* put words on the keys
+- *(cli)* let an assistant drive a Stream Deck
+- *(streamdeck)* have verify check the write path, not only the read
+- *(streamdeck)* put pictures on the keys
+- *(streamdeck)* drive real hardware, and check the driver against it
+- *(streamdeck)* add the Elgato Stream Deck wire protocol crate
+- *(cli)* portable profiles, audited before they are trusted
+- *(camera)* expose webcams of any brand, and add camera MCP tools
+- *(cli)* widen the MCP tool surface to the wheel, lighting and the hook
+- *(cli)* serve the agent over MCP via 'openlogi mcp'
+- *(gui)* add per-app Actions Ring editor
+- *(agent)* follow live language switches in the tray
+- *(agent)* localize the menu-bar tray
+- *(gui)* make production agent launches supervised-only
+- *(ipc)* arm the dormant agent only on a typed GUI declaration
+- *(macos)* sink the launch-at-login switch into the agent
+- *(gui)* own the agent's login-item registration via SMAppService
+- *(xtask)* embed the agent's launchd service plist and start the dev agent
+- *(core)* add the agent launchd service label and a public dev-profile predicate
+
+### Changed
+
+- *(cli)* handle MCP requests concurrently so a long call cannot block
+
+### Fixed
+
+- *(cli)* disambiguate the neo doc links that rustdoc rejects
+- *(cli)* unlock the tourbox elite, which streams nothing until asked
+- *(cli)* verify names the programs that swallow deck key events
+- *(cli)* prove the layout face rule without touching the layout library
+- *(cli)* name the program that is probably holding a Stream Deck open
+- *(cli)* doctor's monitor advice fits the platform it is read on
+- *(display)* refuse a driver-reported capability length of zero
+- *(ipc)* a Key Light that stops answering is listed, not dropped
+- *(gui)* the desk panel's sliders follow the device, and its tasks stop piling up
+- *(display)* type the I2C ioctl request as libc does, not as glibc does
+- point every repository URL at OpenRoadie, not the name it was renamed from
+- the symlink test I added did not compile on Windows
+- *(docs)* the survey pointed at a command the guide never mentioned
+- *(catalog)* the name a device is listed under depended on enumeration order
+- *(doctor)* it checked that devices could be read, and this program writes
+- a broken layouts folder read as an empty one
+- *(streamdeck)* a layout name with a line break in it broke the listing
+- *(via)* check which key the board answered about, not just which command
+- the commands this program prints were not always runnable
+- *(streamdeck)* an edit on Windows rewrote every line in the file
+- *(streamdeck)* write layouts atomically, and edit both TOML spellings
+- *(streamdeck)* say "the deck was unplugged", not "the HID device is not connected"
+- *(mcp)* a request with an id but no method got no answer at all
+- *(streamdeck)* a slow action froze the whole deck
+- *(streamdeck)* a transparent icon arrived as a solid white key
+- *(streamdeck)* a label the font cannot draw said nothing about it
+- *(catalog)* "ELGATO Elgato Stream Deck"
+- *(via)* bound how far a keymap read can scan
+- *(mcp)* a layout name from a model could name a path and write to it
+- *(profile)* a linked folder in the layout library crashed the export
+- "1 action that run a program ... were accepted"
+- *(streamdeck)* editing one key was silently deleting the rest of the file
+- *(list)* the first thing anyone hears was drawn with box characters
+- *(via)* a silent board must say so, not wait forever
+- make the accessible-output promise checkable, and find eleven breaches
+- two things I wrote that were not true
+- *(linux)* the udev rules only covered Logitech, and doctor pointed at them
+- three things my own code got wrong, found by reading it back
+- *(via)* do not bury the assigned keys under the empty ones
+- *(mcp)* build the peripheral entry as a map instead of reopening one
+- *(streamdeck)* use an unknown field name the spell checker accepts
+- *(streamdeck)* fit a picture to the key instead of stretching it
+- *(streamdeck)* refuse an unpageable image instead of saturating
+- *(cli)* answer JSON-RPC batches instead of dropping them
+- *(cli)* keep the input monitor alive for the whole watch window
+- resolve remaining state-machine audit findings ([#1083](https://github.com/nadirthabatah/OpenRoadie/pull/1083))
+- *(gui)* keep the configured inversion visible when the link lacks support
+- *(agent)* track a draining keyboard capture session until it reports done
+- *(agent)* mint HID++ session identities from one shared counter
+- *(gui)* drop observe results from replaced agent connections
+- *(agent)* publish accessibility and hook state in one generation
+- *(gui)* align kickstart diagnostics with supervised fallback
+- *(gui)* gate the spawn reflex on loss age and agent version
+- *(gui)* register the agent service from the spawn cascade
+- *(gui)* don't respawn an agent the user just quit from the tray
+- *(gui)* read the live preference in the startup login-item reconcile
+- *(gui)* persist launch_at_login before touching the login item
+- *(gui)* satisfy the non-macOS lanes' lints on the login-item module
+- *(camera)* read WhiteBalance, not ColorEnable, on Windows ([#662](https://github.com/nadirthabatah/OpenRoadie/pull/662))
+
 ## [0.8.0] - 2026-08-25
 
 ### Added

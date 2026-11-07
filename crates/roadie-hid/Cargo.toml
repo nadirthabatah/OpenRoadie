@@ -12,7 +12,7 @@ categories = ["hardware-support", "asynchronous"]
 readme = "README.md"
 
 [dependencies]
-roadie-core = { path = "../roadie-core", version = "0.8.1" }
+roadie-core = { path = "../roadie-core", version = "0.9.0" }
 hidpp = { workspace = true }
 async-hid = { workspace = true }
 tokio = { workspace = true }
@@ -23,11 +23,11 @@ tracing = { workspace = true }
 futures-concurrency = "7"
 serde_json.workspace = true
 atomic-write-file = { workspace = true }
-roadie-device = { version = "0.8.1", path = "../roadie-device" }
-roadie-catalog = { version = "0.8.1", path = "../roadie-catalog" }
-roadie-streamdeck = { version = "0.8.1", path = "../roadie-streamdeck" }
-roadie-keylight = { version = "0.8.1", path = "../roadie-keylight", default-features = false }
-roadie-via = { version = "0.8.1", path = "../roadie-via" }
+roadie-device = { version = "0.9.0", path = "../roadie-device" }
+roadie-catalog = { version = "0.9.0", path = "../roadie-catalog" }
+roadie-streamdeck = { version = "0.9.0", path = "../roadie-streamdeck" }
+roadie-keylight = { version = "0.9.0", path = "../roadie-keylight", default-features = false }
+roadie-via = { version = "0.9.0", path = "../roadie-via" }
 
 # Native Win32 HID report writes (windows_hid.rs) — a fallback for async-hid's
 # write path on Windows, plus the composite short/long endpoint handling in

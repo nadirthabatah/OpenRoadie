@@ -11,13 +11,13 @@ keywords = ["logitech", "hidpp", "hid", "mouse", "cli"]
 categories = ["command-line-utilities", "hardware-support"]
 
 [dependencies]
-roadie-core = { path = "../roadie-core", version = "0.8.1" }
-roadie-device-registry = { path = "../roadie-device-registry", version = "0.8.1" }
-roadie-catalog = { path = "../roadie-catalog", version = "0.8.1" }
-roadie-via = { path = "../roadie-via", version = "0.8.1" }
-roadie-hid = { path = "../roadie-hid", version = "0.8.1" }
-roadie-inject = { path = "../roadie-inject", version = "0.8.1" }
-roadie-streamdeck = { path = "../roadie-streamdeck", version = "0.8.1", features = [
+roadie-core = { path = "../roadie-core", version = "0.9.0" }
+roadie-device-registry = { path = "../roadie-device-registry", version = "0.9.0" }
+roadie-catalog = { path = "../roadie-catalog", version = "0.9.0" }
+roadie-via = { path = "../roadie-via", version = "0.9.0" }
+roadie-hid = { path = "../roadie-hid", version = "0.9.0" }
+roadie-inject = { path = "../roadie-inject", version = "0.9.0" }
+roadie-streamdeck = { path = "../roadie-streamdeck", version = "0.9.0", features = [
     "render",
 ] }
 # Reading whatever picture a user points at; the encoding for the device
@@ -28,16 +28,16 @@ image = { version = "0.25", default-features = false, features = [
     "gif",
     "bmp",
 ] }
-roadie-camera = { path = "../roadie-camera", version = "0.8.1" }
-roadie-ddc = { path = "../roadie-ddc", version = "0.8.1" }
-roadie-display = { path = "../roadie-display", version = "0.8.1" }
-roadie-focusrite = { path = "../roadie-focusrite", version = "0.8.1" }
-roadie-scarlett = { path = "../roadie-scarlett", version = "0.8.1" }
-roadie-keylight = { path = "../roadie-keylight", version = "0.8.1" }
+roadie-camera = { path = "../roadie-camera", version = "0.9.0" }
+roadie-ddc = { path = "../roadie-ddc", version = "0.9.0" }
+roadie-display = { path = "../roadie-display", version = "0.9.0" }
+roadie-focusrite = { path = "../roadie-focusrite", version = "0.9.0" }
+roadie-scarlett = { path = "../roadie-scarlett", version = "0.9.0" }
+roadie-keylight = { path = "../roadie-keylight", version = "0.9.0" }
 # With the serial feature: this is the host that actually opens the port.
-roadie-tourbox = { path = "../roadie-tourbox", version = "0.8.1" }
-roadie-assets = { path = "../roadie-assets", version = "0.8.1" }
-roadie-ipc = { path = "../roadie-ipc", version = "0.8.1" }
+roadie-tourbox = { path = "../roadie-tourbox", version = "0.9.0" }
+roadie-assets = { path = "../roadie-assets", version = "0.9.0" }
+roadie-ipc = { path = "../roadie-ipc", version = "0.9.0" }
 tarpc = { workspace = true }
 png = "0.17"
 clap = { workspace = true }

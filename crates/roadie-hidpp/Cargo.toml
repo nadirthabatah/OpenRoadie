@@ -41,7 +41,7 @@ tracing = { workspace = true }
 # OpenRoadie-specific: generates the mechanical CreatableFeature/Feature impls
 # for feature structs shaped `{ endpoint: FeatureEndpoint }` or `{ endpoint,
 # events: EventSource<Event> }`. Not in upstream hidpp; used only here.
-roadie-hidpp-derive = { version = "0.8.1", path = "../roadie-hidpp-derive" }
+roadie-hidpp-derive = { version = "0.9.0", path = "../roadie-hidpp-derive" }
 derive_more = { version = "2.1.1", default-features = false, features = ["from", "into"] }
 
 [lints]
