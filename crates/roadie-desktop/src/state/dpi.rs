@@ -59,8 +59,7 @@ impl AppState {
     pub fn dpi_presets(&self) -> Vec<Dpi> {
         self.current_record()
             .and_then(DeviceRecord::persistent_config_key)
-            .map(|key| self.config.dpi_presets(key))
-            .unwrap_or_default()
+            .map_or_default(|key| self.config.dpi_presets(key))
     }
     /// The active device's known DPI, falling back to [`DEFAULT_DPI`] until its
     /// capability read completes. Used to seed the pointer editor on a device switch.

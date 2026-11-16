@@ -491,7 +491,7 @@ pub async fn apply_saved(name: &str) -> Result<usize> {
         ));
     }
     let keys = parsed.keys.len();
-    apply(&collections, &path, &parsed).await?;
+    let _: ExitCode = apply(&collections, &path, &parsed).await?;
     Ok(keys)
 }
 
@@ -918,7 +918,7 @@ async fn run_layout(
         .filter_map(|key| key.action.as_ref().map(|action| (key.index, action)))
         .collect();
     if bound.is_empty() {
-        apply(collections, file, layout).await?;
+        let _: ExitCode = apply(collections, file, layout).await?;
         println!();
         println!("No key in this layout has an action, so there is nothing to run.");
         println!("Add an `action` to a key — `roadie streamdeck example` shows how.");

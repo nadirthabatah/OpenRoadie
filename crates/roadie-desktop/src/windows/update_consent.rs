@@ -51,7 +51,18 @@ pub fn open(cx: &mut App) {
     windows::open_or_focus(
         |reg| &mut reg.update_consent,
         "OpenRoadie",
-        Size::new(px(380.), px(220.)),
+        // Room for the buttons at the largest interface scale, and on Linux
+        // for the title bar drawn inside the window: at 220 px the Linux
+        // dialog cut "Not now" and "Enable" off at its bottom edge.
+        Size::new(
+            px(380.),
+            px(280.)
+                + if cfg!(target_os = "linux") {
+                    gpui_component::TITLE_BAR_HEIGHT
+                } else {
+                    px(0.)
+                },
+        ),
         UpdateConsentView::new,
         cx,
     );
@@ -82,11 +93,15 @@ impl Render for UpdateConsentView {
         );
         // A dialog, named and described, so the question and its terms are read
         // out as the window opens rather than left to be found after the buttons.
+        // Not described on Linux: Orca already reads a dialog's loose text when
+        // it takes focus, so a description there says the body twice.
         v_flex()
             .id("update-consent")
             .role(gpui::accesskit::Role::Dialog)
             .aria_label(title.clone())
-            .aria_description(body.clone())
+            .when(!cfg!(target_os = "linux"), |this| {
+                this.aria_description(body.clone())
+            })
             .size_full()
             .bg(pal.page)
             .text_color(pal.text_primary)

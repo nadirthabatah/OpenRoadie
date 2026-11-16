@@ -131,11 +131,29 @@ fn print_empty_notes(status: Option<&AgentStatus>) {
         }
         Some(status) if status.hid_open_failures => {
             println!("Notes:");
-            println!(
-                "  - Input Monitoring is granted, but the agent's device opens keep \
-                 failing — another app may hold the devices (quit Logi Options+), or \
-                 macOS is serving a stale permission session: log out and back in."
-            );
+            // Off macOS `input_monitoring_granted` is always true, so this arm
+            // is where every open failure lands — the advice must fit the host.
+            if cfg!(target_os = "macos") {
+                println!(
+                    "  - Input Monitoring is granted, but the agent's device opens keep \
+                     failing — another app may hold the devices (quit Logi Options+), or \
+                     macOS is serving a stale permission session: log out and back in."
+                );
+            } else if cfg!(target_os = "linux") {
+                println!(
+                    "  - The agent's device opens keep failing — this user may lack access \
+                     to /dev/hidraw*. The package's udev rules grant it to whoever is \
+                     logged in at the screen, so a session with no seat (SSH, a \
+                     container) gets none — docs/INSTALL-linux.md shows the group-based \
+                     rule for that case."
+                );
+            } else {
+                println!(
+                    "  - The agent's device opens keep failing — another app may hold the \
+                     devices (quit Logi Options+)."
+                );
+            }
+            println!("  - roadie doctor says why a device could not be opened.");
         }
         _ => {
             println!("Notes:");

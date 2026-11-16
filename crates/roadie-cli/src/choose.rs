@@ -97,8 +97,7 @@ pub(crate) fn only<T: Choosable>(mut found: Vec<T>, kind: &Kind) -> Result<T> {
         many => {
             let example = found
                 .get(1)
-                .map(|device| shell_argument(&shortest_unique(device, &found)))
-                .unwrap_or_default();
+                .map_or_default(|device| shell_argument(&shortest_unique(device, &found)));
             Err(anyhow!(
                 "This acts on one {}, and {} are in reach: {}. Choose with --device and part \
                  of a name or serial number, for example: --device {example}",

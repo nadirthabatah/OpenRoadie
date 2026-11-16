@@ -15,6 +15,7 @@ type ClickHandler = std::rc::Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 /// accessibility state.
 #[derive(IntoElement)]
 pub(crate) struct ChoiceCard {
+    id: ElementId,
     base: BaseButton,
     selected: bool,
     disabled: bool,
@@ -28,7 +29,9 @@ impl ChoiceCard {
         id: impl Into<ElementId>,
         accessibility_label: impl Into<SharedString>,
     ) -> Self {
+        let id = id.into();
         Self {
+            id: id.clone(),
             base: BaseButton::new(id),
             selected: false,
             disabled: false,
@@ -89,7 +92,8 @@ impl StatefulInteractiveElement for ChoiceCard {}
 impl RenderOnce for ChoiceCard {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         let selected = self.selected;
-        self.base
+        let card = self
+            .base
             .role(Role::RadioButton)
             .selected(selected)
             .disabled(self.disabled)
@@ -103,7 +107,8 @@ impl RenderOnce for ChoiceCard {
             .children(self.children)
             .when_some(self.on_click, |card, handler| {
                 card.on_click(move |event, window, cx| handler(event, window, cx))
-            })
+            });
+        crate::ui::reveal::reveal(self.id, card)
     }
 }
 

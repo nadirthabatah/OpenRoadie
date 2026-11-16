@@ -133,16 +133,14 @@ impl Capabilities {
     /// which some do; then the standard table is the best a caller has.
     #[must_use]
     pub fn inputs(&self) -> Vec<InputSource> {
-        self.entry(Feature::InputSource)
-            .map(|entry| {
-                entry
-                    .values
-                    .iter()
-                    .copied()
-                    .map(InputSource::from_code)
-                    .collect()
-            })
-            .unwrap_or_default()
+        self.entry(Feature::InputSource).map_or_default(|entry| {
+            entry
+                .values
+                .iter()
+                .copied()
+                .map(InputSource::from_code)
+                .collect()
+        })
     }
 }
 

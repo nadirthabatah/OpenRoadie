@@ -2,19 +2,17 @@
 
 use super::{
     App, Button, ButtonVariants, ClipboardItem, Entity, FontWeight, HELP_URL, Icon, IconName,
-    ParentElement, RELEASES_URL, REPO_URL, SettingGroup, SettingItem, SettingPage, SettingsView,
-    SharedString, Sizable, Styled, div, h_flex, img, px, v_flex,
+    ParentElement, RELEASES_URL, REPO_URL, SettingGroup, SettingPage, SettingsView, SharedString,
+    Sizable, Styled, div, h_flex, img, px, v_flex,
 };
 use crate::ui::theme::Typography as _;
 
 /// The About page: a hero card with the build identity and outbound links, the
 /// on-disk config location, and a trademark disclaimer.
 pub(super) fn about_page(view: Entity<SettingsView>, copied: bool) -> SettingPage {
-    let hero = SettingGroup::new().item(SettingItem::render(move |_, _, cx| {
-        about_hero(&view, copied, cx)
-    }));
-    let config = SettingGroup::new().item(SettingItem::render(move |_, _, cx| about_config(cx)));
-    let footer = SettingGroup::new().item(SettingItem::render(move |_, _, cx| {
+    let hero = SettingGroup::new().item(super::row(move |_, _, cx| about_hero(&view, copied, cx)));
+    let config = SettingGroup::new().item(super::row(move |_, _, cx| about_config(cx)));
+    let footer = SettingGroup::new().item(super::row(move |_, _, cx| {
         let pal = crate::ui::theme::palette(cx);
         div()
             .text_caption()
@@ -136,9 +134,7 @@ fn about_hero(view: &Entity<SettingsView>, copied: bool, cx: &mut App) -> gpui::
 /// The config-file location row with a reveal-in-file-manager button.
 fn about_config(cx: &App) -> gpui::Stateful<gpui::Div> {
     let pal = crate::ui::theme::palette(cx);
-    let path = roadie_core::paths::config_path()
-        .map(|p| p.display().to_string())
-        .unwrap_or_default();
+    let path = roadie_core::paths::config_path().map_or_default(|p| p.display().to_string());
 
     // Named for the file, so "Show in file manager" is heard as showing it.
     crate::ui::a11y::group("about-config", "config.toml")

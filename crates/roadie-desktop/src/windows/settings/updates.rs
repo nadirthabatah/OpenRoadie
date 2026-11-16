@@ -2,8 +2,8 @@
 
 use super::{
     App, AppState, Button, ButtonVariants, Disableable, Entity, FontWeight, IconName,
-    ParentElement, RELEASES_URL, SettingGroup, SettingItem, SettingPage, Sizable, StateEvent,
-    Styled, Tag, UpdateStatus, Updater, div, h_flex, img, px, v_flex,
+    ParentElement, RELEASES_URL, SettingGroup, SettingPage, Sizable, StateEvent, Styled, Tag,
+    UpdateStatus, Updater, div, h_flex, img, px, v_flex,
 };
 use crate::ui::theme::Typography as _;
 
@@ -11,9 +11,7 @@ use crate::ui::theme::Typography as _;
 /// the contextual check / install / restart action; the opt-in auto-check and
 /// auto-install switches; and where updates come from.
 pub(super) fn updates_page(updater: Entity<Updater>) -> SettingPage {
-    let hero = SettingGroup::new().item(SettingItem::render(move |_, _, cx| {
-        update_hero(&updater, cx)
-    }));
+    let hero = SettingGroup::new().item(super::row(move |_, _, cx| update_hero(&updater, cx)));
 
     let toggles = SettingGroup::new()
         .item(super::switch_item(
@@ -43,7 +41,7 @@ pub(super) fn updates_page(updater: Entity<Updater>) -> SettingPage {
             },
         ));
 
-    let source = SettingGroup::new().item(SettingItem::render(move |_, _, cx| update_source(cx)));
+    let source = SettingGroup::new().item(super::row(move |_, _, cx| update_source(cx)));
     SettingPage::new(tr!("Updates"))
         .icon(IconName::ArrowDown)
         .resettable(false)

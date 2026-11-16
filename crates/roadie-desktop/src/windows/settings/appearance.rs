@@ -7,9 +7,9 @@ use roadie_core::config::{AppIcon, Contrast};
 use super::{
     ActiveTheme, App, AppState, Appearance, Axis, Button, ButtonGroup, Entity, FluentBuilder, Hsla,
     IconName, InputState, InteractiveElement, IntoElement, Palette, ParentElement, Rc, SelectState,
-    Selectable, SettingField, SettingGroup, SettingItem, SettingPage, SettingsView, SharedString,
-    StateEvent, StatefulInteractiveElement, Styled, Theme, ThemeColor, ThemeConfig, ThemeFilter,
-    ThemeMode, ThemeRegistry, UiScale, div, h_flex, px, rgb, theme, v_flex,
+    Selectable, SettingGroup, SettingItem, SettingPage, SettingsView, SharedString, StateEvent,
+    StatefulInteractiveElement, Styled, Theme, ThemeColor, ThemeConfig, ThemeFilter, ThemeMode,
+    ThemeRegistry, UiScale, div, h_flex, px, rgb, theme, v_flex,
 };
 use crate::platform::app_icon;
 use crate::ui::choice_card::ChoiceCard;
@@ -34,7 +34,7 @@ pub(super) fn appearance_page(
             .item(
                 SettingItem::new(
                     tr!("Appearance mode"),
-                    SettingField::render(move |_, _, cx| {
+                    super::field(move |_, _, cx| {
                         crate::ui::a11y::group("appearance-mode", tr!("Appearance mode"))
                             .child(mode_segment(cx))
                     }),
@@ -47,7 +47,7 @@ pub(super) fn appearance_page(
             .item(
                 SettingItem::new(
                     tr!("Color theme"),
-                    SettingField::render(move |_, _, cx| {
+                    super::field(move |_, _, cx| {
                         crate::ui::a11y::group("color-theme", tr!("Color theme"))
                             .child(theme_picker(&view, &theme_search, filter, cx))
                     }),
@@ -61,7 +61,7 @@ pub(super) fn appearance_page(
         theme_group = theme_group.item(
             SettingItem::new(
                 tr!("App icon"),
-                SettingField::render(move |_, _, cx| icon_picker(cx)),
+                super::field(move |_, _, cx| icon_picker(cx)),
             )
             .layout(Axis::Vertical)
             .description(tr!(
@@ -74,7 +74,7 @@ pub(super) fn appearance_page(
         .item(
             SettingItem::new(
                 tr!("High contrast"),
-                SettingField::render(move |_, _, cx| {
+                super::field(move |_, _, cx| {
                     crate::ui::a11y::group("contrast-group", tr!("High contrast"))
                         .child(contrast_segment(cx))
                 }),
@@ -88,7 +88,7 @@ pub(super) fn appearance_page(
             // wide thumbnail/grid controls which stack below.
             SettingItem::new(
                 tr!("Corner radius"),
-                SettingField::render(move |_, _, cx| {
+                super::field(move |_, _, cx| {
                     crate::ui::a11y::group("radius-group", tr!("Corner radius"))
                         .child(radius_segment(cx))
                 }),
@@ -98,7 +98,7 @@ pub(super) fn appearance_page(
         .item(
             SettingItem::new(
                 tr!("Interface scale"),
-                SettingField::render(move |_, _, cx| {
+                super::field(move |_, _, cx| {
                     crate::ui::a11y::group("scale-group", tr!("Interface scale"))
                         .child(scale_segment(cx))
                 }),
@@ -109,9 +109,7 @@ pub(super) fn appearance_page(
     let language_group = SettingGroup::new().title(tr!("Language")).item(
         SettingItem::new(
             tr!("Interface language"),
-            SettingField::render(move |_, _, cx| {
-                language_select_field(language_select.clone(), cx)
-            }),
+            super::field(move |_, _, cx| language_select_field(language_select.clone(), cx)),
         )
         .description(tr!("Choose the interface language.")),
     );
@@ -247,12 +245,25 @@ fn mode_card(
             ),
         });
 
+    // A column: the base button lays its children out in a row, which put
+    // the thumbnail beside its label instead of above it.
     ChoiceCard::new(id, label.clone())
         .selected(selected)
+        .flex_col()
         .gap(px(6.))
         .items_center()
         .cursor_pointer()
-        .focus_visible(move |style| style.text_color(pal.text_primary))
+        // A drawn outline when focused: a change of text colour alone was
+        // too faint to follow, magnified or not.
+        .p_1()
+        .rounded(pal.control_radius)
+        .border_2()
+        .border_color(gpui::transparent_black())
+        .focus_visible(move |style| {
+            style
+                .text_color(pal.text_primary)
+                .border_color(pal.text_primary)
+        })
         .child(thumb)
         .child(
             h_flex()
@@ -284,10 +295,21 @@ fn icon_card(icon: AppIcon, selected: bool, accent: Hsla, pal: Palette) -> impl 
     let preview = app_icon::preview(icon);
     ChoiceCard::new(SharedString::from(icon.to_string()), icon_label(icon))
         .selected(selected)
+        .flex_col()
         .gap(px(6.))
         .items_center()
         .cursor_pointer()
-        .focus_visible(move |style| style.text_color(pal.text_primary))
+        // A drawn outline when focused: a change of text colour alone was
+        // too faint to follow, magnified or not.
+        .p_1()
+        .rounded(pal.control_radius)
+        .border_2()
+        .border_color(gpui::transparent_black())
+        .focus_visible(move |style| {
+            style
+                .text_color(pal.text_primary)
+                .border_color(pal.text_primary)
+        })
         .child(
             div()
                 .size(px(80.))
@@ -625,8 +647,11 @@ fn theme_card(
 ) -> impl IntoElement {
     let dark = mode.is_dark();
     let stored = name.clone();
+    // A column, preview over name: laid out as the base button's row, a long
+    // name ran across the neighbouring cards.
     ChoiceCard::new((ElementId::from("theme"), name.clone()), name.clone())
         .selected(selected)
+        .flex_col()
         .w(px(132.))
         .p(px(8.))
         .gap_2()
@@ -644,7 +669,17 @@ fn theme_card(
                 style.border_color(pal.text_muted)
             }
         })
-        .focus_visible(move |style| style.border_color(swatch.primary).shadow_sm())
+        // The page's own text colour, not the theme's accent: a pale accent
+        // on a white page left the focused card barely marked. Twice as
+        // thick, too — under high contrast every card is already ringed in
+        // black — with the padding giving back the extra pixel.
+        .focus_visible(move |style| {
+            style
+                .border_2()
+                .p(px(7.))
+                .border_color(pal.text_primary)
+                .shadow_sm()
+        })
         .active(gpui::Styled::shadow_2xs)
         .child(
             v_flex()
@@ -675,12 +710,16 @@ fn theme_card(
         )
         .child(
             h_flex()
-                .items_center()
+                .w_full()
+                .items_start()
                 .justify_between()
                 .gap_1()
                 .child(
+                    // Wraps rather than clipping, so a magnified name is read
+                    // whole.
                     div()
-                        .overflow_hidden()
+                        .flex_1()
+                        .min_w_0()
                         .text_caption()
                         .text_color(pal.text_primary)
                         .child(name),
@@ -743,8 +782,13 @@ fn filter_chip(
                 this.border_color(pal.border)
                     .text_color(pal.text_muted)
                     .hover(|h| h.border_color(pal.text_muted))
-                    .focus_visible(|h| h.border_color(pal.text_muted))
             }
+        })
+        // Filled when focused, selected or not, so focus never looks like
+        // selection.
+        .focus_visible(|h| {
+            h.border_color(theme::accent())
+                .bg(theme::accent_tint_hover())
         })
         .child(label)
         .on_click(move |_, _, cx| {

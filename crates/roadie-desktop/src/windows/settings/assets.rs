@@ -8,9 +8,8 @@ use crate::ui::components::control_select;
 
 use super::{
     App, AppState, AssetCommand, AssetControl, AssetSourcePreference, Entity, IconName, IndexPath,
-    InteractiveElement, IntoElement, Palette, ParentElement, SelectItem, SelectState, SettingField,
-    SettingGroup, SettingItem, SettingPage, SettingsView, SharedString, StateEvent, Styled, div,
-    px,
+    InteractiveElement, IntoElement, Palette, ParentElement, SelectItem, SelectState, SettingGroup,
+    SettingItem, SettingPage, SettingsView, SharedString, StateEvent, Styled, div, px,
 };
 
 #[derive(Clone)]
@@ -68,7 +67,7 @@ pub(super) fn assets_page(
         .item(
             SettingItem::new(
                 tr!("Asset source"),
-                SettingField::render(move |_, _, cx| {
+                super::field(move |_, _, cx| {
                     asset_source_select_field(asset_source_select.clone(), cx)
                 }),
             )
@@ -98,7 +97,7 @@ pub(super) fn assets_page(
         .item(
             SettingItem::new(
                 tr!("Refresh assets"),
-                SettingField::render(move |_, _, cx| {
+                super::field(move |_, _, cx| {
                     let view = refresh_view.clone();
                     let pal = crate::ui::theme::palette(cx);
                     let spoken = (
@@ -120,7 +119,7 @@ pub(super) fn assets_page(
         .item(
             SettingItem::new(
                 tr!("Clear cache"),
-                SettingField::render({
+                super::field({
                     let cache_desc = cache_desc.clone();
                     move |_, _, cx| {
                         let view = view.clone();
@@ -142,7 +141,7 @@ pub(super) fn assets_page(
         .item(
             SettingItem::new(
                 tr!("Cache location"),
-                SettingField::render(move |_, _, cx| {
+                super::field(move |_, _, cx| {
                     let pal = crate::ui::theme::palette(cx);
                     // Starts with what is drawn, so voice control's "click Open" finds it.
                     let spoken = (

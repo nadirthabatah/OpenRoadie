@@ -49,9 +49,7 @@ impl LightPanel {
     /// Construct the panel. Capability-shaped sliders are created lazily when
     /// the selected device is known.
     pub fn new(cx: &mut Context<Self>) -> Self {
-        let settings = AppState::try_read(cx)
-            .map(AppState::light)
-            .unwrap_or_default();
+        let settings = AppState::try_read(cx).map_or_default(AppState::light);
         let state_obs = cx.subscribe(&AppState::global(cx), |_, _, event: &StateEvent, cx| {
             let relevant = match event {
                 StateEvent::InventoryChanged
@@ -176,9 +174,7 @@ impl Render for LightPanel {
     )]
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let pal = theme::palette(cx);
-        let settings = AppState::try_read(cx)
-            .map(AppState::light)
-            .unwrap_or_default();
+        let settings = AppState::try_read(cx).map_or_default(AppState::light);
         let record = AppState::try_read(cx)
             .and_then(AppState::current_record)
             .cloned();

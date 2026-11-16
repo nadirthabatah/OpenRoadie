@@ -244,14 +244,17 @@ impl RenderOnce for Toggle {
         if let Some(handler) = self.on_change {
             switch = switch.on_change(move |next, _event, window, cx| handler(&next, window, cx));
         }
-        h_flex()
-            .items_center()
-            .gap_2()
-            .when_some(self.min_width, |row, width| {
-                row.min_w(width).justify_center()
-            })
-            .when_some(self.icon, |row, icon| row.child(Icon::new(icon).size_3()))
-            .child(switch)
+        crate::ui::reveal::reveal(
+            self.id,
+            h_flex()
+                .items_center()
+                .gap_2()
+                .when_some(self.min_width, |row, width| {
+                    row.min_w(width).justify_center()
+                })
+                .when_some(self.icon, |row, icon| row.child(Icon::new(icon).size_3()))
+                .child(switch),
+        )
     }
 }
 
@@ -321,6 +324,7 @@ type ClickHandler = std::rc::Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 /// A full-width row in an action menu.
 #[derive(IntoElement)]
 pub(crate) struct MenuRow {
+    id: ElementId,
     base: BaseButton,
     selected: bool,
     children: Vec<AnyElement>,
@@ -329,7 +333,9 @@ pub(crate) struct MenuRow {
 
 impl MenuRow {
     pub(crate) fn new(id: impl Into<ElementId>) -> Self {
+        let id = id.into();
         Self {
+            id: id.clone(),
             base: BaseButton::new(id),
             selected: false,
             children: Vec::new(),
@@ -383,7 +389,8 @@ impl RenderOnce for MenuRow {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let pal = theme::palette(cx);
         let selected = self.selected;
-        self.base
+        let row = self
+            .base
             .selected(selected)
             .aria_selected(selected)
             .w_full()
@@ -414,7 +421,8 @@ impl RenderOnce for MenuRow {
             .children(self.children)
             .when_some(self.on_click, |row, handler| {
                 row.on_click(move |event, window, cx| handler(event, window, cx))
-            })
+            });
+        crate::ui::reveal::reveal(self.id, row)
     }
 }
 
