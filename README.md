@@ -111,20 +111,22 @@ Tested by this fork on real hardware:
 - **macOS 26 (Mac Studio, Apple silicon):** builds and passes the full test
   suite; the app was checked with VoiceOver and Zoom.
 - **Screen readers and high contrast:** as listed under Accessibility. The
-  Linux screen-reader checks ran under WSL with simulated devices.
+  full Linux screen-reader audit ran under WSL with simulated devices; Orca
+  then ran on the Ubuntu box against the installed `.deb` and the real Nano
+  receiver, and read the device list, both receiver slots with their status,
+  and every toolbar control. That run used a virtual screen over SSH.
 
 Not tested by this fork yet:
 
 - Webcams, Litra lights, Elgato Key Lights over the network, and Scarlett
   interfaces — supported in the code, but none has been tested here yet.
 - Unifying receivers and Bluetooth-direct Logitech devices.
-- Real devices on macOS in this round, and the desktop app on Linux real
-  hardware with a screen reader.
+- Real devices on macOS in this round, and Orca at a physical Linux desktop.
 - Installing the `.dmg` and `.msi` on a clean machine: CI builds them, but
   they have not been install-tested. The Linux packages have: the `.deb`,
   `.rpm` and Arch package each install and start on fresh Ubuntu 22.04,
-  Fedora 45 and Arch systems under WSL, though not yet on a real desktop or
-  on arm64.
+  Fedora 45 and Arch systems under WSL, and the `.deb` installs through `apt`
+  on the Ubuntu 26.04 box, though not yet on arm64.
 
 ## Install
 
