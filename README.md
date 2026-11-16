@@ -83,7 +83,9 @@ magnifier, or in high contrast.
   activates it. Device menus, the rename dialog and Settings work from the
   keyboard, and opening a page puts focus on its title.
 - **Magnifiers.** Focus is reported to the system, so Windows Magnifier and
-  macOS Zoom follow it from control to control.
+  macOS Zoom follow it from control to control, and a long page scrolls to
+  keep the focused control in view. The focused control is outlined in the
+  text colour, which holds under high contrast.
 - **High contrast.** Follows Windows contrast themes, GNOME's high-contrast
   setting or a `HighContrast` GTK theme, and macOS Increase Contrast, with its
   own accent and status colours. It can also be forced on in Settings →
@@ -95,7 +97,10 @@ magnifier, or in high contrast.
 Known limits: a button that is briefly greyed out says "unavailable" in its
 name rather than through the platform's disabled state, and on Linux a
 dropdown's current choice is part of its name, because the toolkit underneath
-does not yet report either on its own.
+does not yet report either on its own. Also on Linux, the toolkit reports
+control positions relative to the window rather than the screen, so a
+magnifier that tracks focus by position (GNOME's) can zoom to the wrong place
+unless the window sits at the top-left of the screen.
 
 ## What has been tested
 
@@ -113,8 +118,10 @@ Tested by this fork on real hardware:
 - **Screen readers and high contrast:** as listed under Accessibility. The
   full Linux screen-reader audit ran under WSL with simulated devices; Orca
   then ran on the Ubuntu box against the installed `.deb` and the real Nano
-  receiver, and read the device list, both receiver slots with their status,
-  and every toolbar control. That run used a virtual screen over SSH.
+  receiver, and a keyboard tour reached every Settings page, the desk and
+  each device tab, with and without high contrast, keeping focus on screen
+  throughout. That run used a virtual screen over SSH. On Windows the same
+  scroll-to-focus check ran through UI Automation.
 
 Not tested by this fork yet:
 
