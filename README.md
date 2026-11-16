@@ -97,10 +97,11 @@ magnifier, or in high contrast.
 Known limits: a button that is briefly greyed out says "unavailable" in its
 name rather than through the platform's disabled state, and on Linux a
 dropdown's current choice is part of its name, because the toolkit underneath
-does not yet report either on its own. Also on Linux, the toolkit reports
-control positions relative to the window rather than the screen, so a
-magnifier that tracks focus by position (GNOME's) can zoom to the wrong place
-unless the window sits at the top-left of the screen.
+does not yet report either on its own. Also on Linux, control positions are
+right within the window — which is what GNOME's magnifier reads when it
+follows focus — but under some X11 window managers their position on the
+screen as a whole is not, so a tool that reads screen positions directly can
+land off target.
 
 ## What has been tested
 
