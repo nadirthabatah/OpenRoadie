@@ -6,11 +6,14 @@ set -eu
 # before the script exits so the agent can open /dev/hidraw* and the mouse's
 # /dev/input/event* node immediately, even for a device connected before the
 # install.
+#
+# Best-effort, like the rest: with no udev daemon running (a container, WSL)
+# these fail, and failing here left the whole package half-installed.
 if command -v udevadm >/dev/null 2>&1; then
-  udevadm control --reload-rules
-  udevadm trigger --subsystem-match=hidraw
-  udevadm trigger --subsystem-match=input
-  udevadm trigger --subsystem-match=tty
+  udevadm control --reload-rules 2>/dev/null || true
+  udevadm trigger --subsystem-match=hidraw 2>/dev/null || true
+  udevadm trigger --subsystem-match=input 2>/dev/null || true
+  udevadm trigger --subsystem-match=tty 2>/dev/null || true
   udevadm trigger --subsystem-match=misc --attr-match=name=uinput 2>/dev/null || true
   udevadm settle 2>/dev/null || true
 fi
