@@ -9,8 +9,8 @@ use roadie_hook::Hook;
 #[cfg(debug_assertions)]
 use super::AppState;
 use super::{
-    App, Axis, IconName, IntoElement, Palette, ParentElement, SettingField, SettingGroup,
-    SettingItem, SettingPage, Styled, div, v_flex,
+    App, Axis, IconName, IntoElement, Palette, ParentElement, SettingGroup, SettingItem,
+    SettingPage, Styled, div, v_flex,
 };
 
 /// The Diagnostics page: the curated input-conflict check, plus (debug) the raw
@@ -24,7 +24,7 @@ pub(super) fn diagnostics_page() -> SettingPage {
             SettingGroup::new().item(
                 SettingItem::new(
                     tr!("Input interception"),
-                    SettingField::render(move |_, _, cx| input_conflict_field(cx)),
+                    super::field(move |_, _, cx| input_conflict_field(cx)),
                 )
                 .description(tr!(
                     "Detects other apps tapping the mouse event stream — a common cause of pointer lag."

@@ -307,8 +307,9 @@ impl RenderOnce for LevelSlider {
             .clone();
         let focused = focus.is_focused(window);
         let model = self.model.clone();
+        let reveal_id = self.id.clone();
 
-        slider_frame(
+        let slider = slider_frame(
             self.id,
             self.name,
             self.spoken,
@@ -403,7 +404,8 @@ impl RenderOnce for LevelSlider {
             move |_, _, cx| release(&model, cx)
         })
         .on_mouse_up_out(MouseButton::Left, move |_, _, cx| release(&model, cx))
-        .child(slider_track(fraction, track, pal))
+        .child(slider_track(fraction, track, pal));
+        crate::ui::reveal::reveal(reveal_id, slider)
     }
 }
 
@@ -543,8 +545,9 @@ impl RenderOnce for StateSlider {
                 })
             }
         };
+        let reveal_id = self.id.clone();
 
-        slider_frame(
+        let slider = slider_frame(
             self.id,
             self.name,
             (self.spoken)(value),
@@ -647,7 +650,8 @@ impl RenderOnce for StateSlider {
                 }
             }
         })
-        .child(slider_track(fraction, track, pal))
+        .child(slider_track(fraction, track, pal));
+        crate::ui::reveal::reveal(reveal_id, slider)
     }
 }
 

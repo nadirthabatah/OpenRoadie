@@ -25,7 +25,9 @@ pub(super) use gpui_component::{
     h_flex,
     input::{InputEvent, InputState},
     select::{SelectEvent, SelectItem, SelectState},
-    setting::{SelectIndex, SettingField, SettingGroup, SettingItem, SettingPage, Settings},
+    setting::{
+        RenderOptions, SelectIndex, SettingField, SettingGroup, SettingItem, SettingPage, Settings,
+    },
     slider::{SliderEvent, SliderState},
     tag::Tag,
     theme::ThemeConfig,
@@ -797,6 +799,41 @@ fn page_tabs(
                         }))
                 }),
         )
+}
+
+/// A setting's field that scrolls into view as focus reaches it, so Tab never
+/// leaves the focused control below the window. Keyed by where it is built:
+/// each call site makes one field.
+#[track_caller]
+pub(super) fn field<E>(
+    render: impl Fn(&RenderOptions, &mut Window, &mut App) -> E + 'static,
+) -> SettingField<SharedString>
+where
+    E: IntoElement + 'static,
+{
+    let id = reveal_id(std::panic::Location::caller());
+    SettingField::render(move |options, window, cx| {
+        crate::ui::reveal::reveal(id.clone(), render(options, window, cx))
+    })
+}
+
+/// A whole-width setting row that scrolls into view as focus reaches it; the
+/// row twin of [`field`].
+#[track_caller]
+pub(super) fn row<E>(
+    render: impl Fn(&RenderOptions, &mut Window, &mut App) -> E + 'static,
+) -> SettingItem
+where
+    E: IntoElement + 'static,
+{
+    let id = reveal_id(std::panic::Location::caller());
+    SettingItem::render(move |options, window, cx| {
+        crate::ui::reveal::reveal(id.clone(), render(options, window, cx))
+    })
+}
+
+fn reveal_id(at: &std::panic::Location<'_>) -> gpui::ElementId {
+    SharedString::from(format!("reveal:{}:{}", at.file(), at.line())).into()
 }
 
 /// A setting row with an on/off switch, named and described for assistive

@@ -2,8 +2,8 @@
 
 use super::{
     App, AppState, Entity, FluentBuilder, IconName, InteractiveElement, ParentElement,
-    SettingField, SettingGroup, SettingItem, SettingPage, SliderState, StateEvent, Styled,
-    ThumbwheelSensitivity, VerticalScrollSensitivity, div, h_flex, px, theme, v_flex,
+    SettingGroup, SettingItem, SettingPage, SliderState, StateEvent, Styled, ThumbwheelSensitivity,
+    VerticalScrollSensitivity, div, h_flex, px, theme, v_flex,
 };
 use crate::ui::theme::Typography as _;
 use gpui_base::Button as BaseButton;
@@ -30,7 +30,7 @@ pub(super) fn general_page(
         .item(
             SettingItem::new(
                 tr!("Vertical Scroll Sensitivity"),
-                SettingField::render(move |_, _, cx| {
+                super::field(move |_, _, cx| {
                     vertical_scroll_sensitivity_field(&vertical_scroll, cx)
                 }),
             )
@@ -41,7 +41,7 @@ pub(super) fn general_page(
         .item(
             SettingItem::new(
                 tr!("Thumb Wheel Sensitivity"),
-                SettingField::render(move |_, _, cx| {
+                super::field(move |_, _, cx| {
                     thumbwheel_sensitivity_field(&thumbwheel, cx)
                 }),
             )
@@ -200,7 +200,7 @@ fn launch_at_login_item() -> SettingItem {
 fn login_item_approval_notice() -> SettingItem {
     SettingItem::new(
         tr!("Login item disabled in System Settings"),
-        SettingField::render(|_, _, cx| open_login_items_button(cx)),
+        super::field(|_, _, cx| open_login_items_button(cx)),
     )
     .description(tr!(
         "macOS is blocking OpenRoadie's background agent: its login item is switched off. The agent cannot run until you turn it back on under Login Items."
