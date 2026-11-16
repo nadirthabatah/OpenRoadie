@@ -120,9 +120,11 @@ Not tested by this fork yet:
 - Unifying receivers and Bluetooth-direct Logitech devices.
 - Real devices on macOS in this round, and the desktop app on Linux real
   hardware with a screen reader.
-- Installing the packaged `.dmg`, `.msi` and Linux packages on a clean
-  machine: CI builds them for every platform, but they have not been
-  install-tested.
+- Installing the `.dmg` and `.msi` on a clean machine: CI builds them, but
+  they have not been install-tested. The Linux packages have: the `.deb`,
+  `.rpm` and Arch package each install and start on fresh Ubuntu 22.04,
+  Fedora 45 and Arch systems under WSL, though not yet on a real desktop or
+  on arm64.
 
 ## Install
 
