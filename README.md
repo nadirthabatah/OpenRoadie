@@ -70,6 +70,75 @@ Things OpenRoadie does that Options+ won't:
 
 ¹ Media key actions use D-Bus MPRIS on Linux; a handful of macOS-specific actions have no universal Linux equivalent and are no-ops. Windows maps platform actions to native equivalents where available.
 
+## Accessibility
+
+OpenRoadie is built to be used without seeing the screen, with a screen
+magnifier, or in high contrast.
+
+- **Screen readers.** Every control has a name, a role and its state — on or
+  off, selected, a slider's value, a device's battery and connection — and a
+  description where one helps. Tested with NVDA and Narrator on Windows 11,
+  Orca on Linux, and VoiceOver on macOS.
+- **Keyboard.** Tab and Shift+Tab reach every control; Space or Enter
+  activates it. Device menus, the rename dialog and Settings work from the
+  keyboard, and opening a page puts focus on its title.
+- **Magnifiers.** Focus is reported to the system, so Windows Magnifier,
+  macOS Zoom and GNOME's magnifier follow it from control to control, and a
+  long page scrolls to
+  keep the focused control in view. The focused control is outlined in the
+  text colour, which holds under high contrast.
+- **High contrast.** Follows Windows contrast themes, GNOME's high-contrast
+  setting or a `HighContrast` GTK theme, and macOS Increase Contrast, with its
+  own accent and status colours. It can also be forced on in Settings →
+  Appearance. Text size follows Windows' text size and GNOME's text scaling.
+- **Without the window.** Everything the app does is also available from the
+  command line, with output written to be read aloud, and to an AI assistant
+  over MCP (see [Usage](docs/USAGE.md)).
+
+Known limits: a button that is briefly greyed out says "unavailable" in its
+name rather than through the platform's disabled state, and on Linux a
+dropdown's current choice is part of its name, because the toolkit underneath
+does not yet report either on its own. Also on Linux, control positions are
+right within the window — which is what GNOME's magnifier reads when it
+follows focus — but under some X11 window managers their position on the
+screen as a whole is not, so a tool that reads screen positions directly can
+land off target.
+
+## What has been tested
+
+Tested by this fork on real hardware:
+
+- **Windows 11:** an MX Mechanical keyboard and MX Master 3S mouse on a Bolt
+  receiver (battery, DPI, SmartShift, backlight), Stream Deck
+  XL and Mini (key images, brightness, key presses, layouts, reconnecting after
+  a USB switch), Key Light Neo over USB, TourBox Elite, a Kiiboom Cybrix 16 over
+  VIA, a Focusrite Vocaster Two, and an HG560T34 monitor over DDC/CI.
+- **Linux (Ubuntu 26.04):** the same desk moved over by a USB switch, with the
+  monitor on an NVIDIA card, plus a Logitech Nano (`c534`) keyboard and mouse.
+- **macOS 26 (Mac Studio, Apple silicon):** builds and passes the full test
+  suite; the app was checked with VoiceOver and Zoom.
+- **Screen readers and high contrast:** as listed under Accessibility. The
+  full Linux screen-reader audit ran under WSL with simulated devices; Orca
+  then ran on the Ubuntu box against the installed `.deb` and the real Nano
+  receiver, and a keyboard tour reached every Settings page, the desk and
+  each device tab, with and without high contrast, keeping focus on screen
+  throughout. That run used a virtual screen over SSH. GNOME's magnifier was
+  then seen following Tab from control to control at three times zoom, in a
+  headless GNOME Shell 50 session on Wayland. On Windows the same
+  scroll-to-focus check ran through UI Automation.
+
+Not tested by this fork yet:
+
+- Webcams, Litra lights, Elgato Key Lights over the network, and Scarlett
+  interfaces — supported in the code, but none has been tested here yet.
+- Unifying receivers and Bluetooth-direct Logitech devices.
+- Real devices on macOS in this round, and Orca at a physical Linux desktop.
+- Installing the `.dmg` and `.msi` on a clean machine: CI builds them, but
+  they have not been install-tested. The Linux packages have: the `.deb`,
+  `.rpm` and Arch package each install and start on fresh Ubuntu 22.04,
+  Fedora 45 and Arch systems under WSL, and the `.deb` installs through `apt`
+  on the Ubuntu 26.04 box, though not yet on arm64.
+
 ## Install
 
 > [!IMPORTANT]
@@ -79,7 +148,10 @@ Things OpenRoadie does that Options+ won't:
 
 Requires macOS 13 or later.
 
-Download the signed, notarized `.dmg` from the [latest release](https://github.com/nadirthabatah/OpenRoadie/releases/latest) and drag `OpenRoadie.app` to `/Applications`.
+Download the `.dmg` from the [latest release](https://github.com/nadirthabatah/OpenRoadie/releases/latest) and drag `OpenRoadie.app` to `/Applications`.
+
+Releases are not code-signed yet. The first time, Control-click (or
+right-click) OpenRoadie in Applications and choose **Open**, then confirm.
 
 There is no package-manager distribution under the OpenRoadie name yet;
 the `.dmg` from this repository's releases is the install path. (Upstream
@@ -141,8 +213,10 @@ manual / source installs, and distros without systemd.
 
 ### Windows
 
-Signed portable `.zip` archives and per-user `.msi` installers (x86_64 and
-arm64) are attached to each release. Both ship the GUI (`OpenRoadie.exe`)
+Portable `.zip` archives and per-user `.msi` installers (x86_64 and
+arm64) are attached to each release. They are not code-signed yet: SmartScreen
+asks before the first run (**More info** → **Run anyway**), and with Smart App
+Control turned on, Windows refuses unsigned programs altogether. Both ship the GUI (`OpenRoadie.exe`)
 together with the background agent (`roadie-agent.exe`), which owns all
 device I/O. Keep the two files side by side when using the portable zip, or
 the GUI has nothing to connect to.

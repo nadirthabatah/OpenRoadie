@@ -704,7 +704,22 @@ The tools exposed are:
 | `list_keyboards` | QMK/VIA boards attached, with protocol revision and layer count |
 | `read_keymap` | A layer's keys, by name rather than by number |
 | `set_key` | Change what one key sends, confirmed by reading it back |
+| `list_device_keys` | The devices whose buttons can be set, by the key the binding tools take |
+| `list_actions` | Every action a button or Actions Ring slot can be set to, by name |
+| `read_button_bindings` | What each button on one device does, and its Actions Ring |
+| `set_button_action` | Set what one mouse or keyboard button does, and apply it |
+| `set_action_ring_slot` | Set or empty one of the eight Actions Ring slots, and apply it |
+| `list_audio_interfaces` | Focusrite Scarlett and Vocaster interfaces, with each input's gain, mute and phantom power |
+| `set_audio_input` / `set_phantom_power` | Change an input's gain or mute; switch 48 volt phantom power off |
+| `list_tourboxes` / `watch_tourbox` | TourBox controllers attached, and what each control sends |
 | `diagnose` | Why devices are not being found, and the steps that fix it |
+
+The binding tools take an action **by name only** — `Copy`, `BrowserBack`,
+`VolumeUp` — the same rule `set_layout_key` follows. An action that runs a
+program, runs a script or types text carries a value, so it cannot be named
+here and stays the person's to write in `config.toml`. A change is saved to the
+config and the agent is asked to apply it at once; if the OpenRoadie window is
+open, reopen it to see the change.
 
 The layout tools address layouts **by name only**. The command line takes a
 name or a path, because someone who types a path means that path; this surface
