@@ -227,15 +227,12 @@ fn wanted_sessions(
     if receiver_access.exclusive_requested() {
         return HashMap::new();
     }
-    capture_plans
-        .read()
-        .map(|plans| {
-            plans
-                .iter()
-                .map(|plan| (plan.config_key.clone(), SessionTarget::for_plan(plan)))
-                .collect()
-        })
-        .unwrap_or_default()
+    capture_plans.read().map_or_default(|plans| {
+        plans
+            .iter()
+            .map(|plan| (plan.config_key.clone(), SessionTarget::for_plan(plan)))
+            .collect()
+    })
 }
 
 /// Keep one capture session alive per online device, restarting a session when

@@ -43,9 +43,7 @@ pub fn button_bindings_for(
     config_key: Option<&str>,
     app_bundle: Option<&str>,
 ) -> BTreeMap<ButtonId, Binding> {
-    let stored = config_key
-        .map(|key| config.effective_bindings(key, app_bundle))
-        .unwrap_or_default();
+    let stored = config_key.map_or_default(|key| config.effective_bindings(key, app_bundle));
     let mut bindings: BTreeMap<ButtonId, Binding> = ButtonId::ALL
         .iter()
         .copied()

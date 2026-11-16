@@ -134,9 +134,7 @@ fn about_hero(view: &Entity<SettingsView>, copied: bool, cx: &mut App) -> gpui::
 /// The config-file location row with a reveal-in-file-manager button.
 fn about_config(cx: &App) -> gpui::Stateful<gpui::Div> {
     let pal = crate::ui::theme::palette(cx);
-    let path = roadie_core::paths::config_path()
-        .map(|p| p.display().to_string())
-        .unwrap_or_default();
+    let path = roadie_core::paths::config_path().map_or_default(|p| p.display().to_string());
 
     // Named for the file, so "Show in file manager" is heard as showing it.
     crate::ui::a11y::group("about-config", "config.toml")

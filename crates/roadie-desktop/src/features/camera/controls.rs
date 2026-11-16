@@ -540,9 +540,7 @@ impl CameraControlsPanel {
         let (Some(key), Some(uid)) = (self.key.clone(), self.uid.clone()) else {
             return;
         };
-        let custom = AppState::try_read(cx)
-            .map(|s| s.camera_profiles(&key))
-            .unwrap_or_default();
+        let custom = AppState::try_read(cx).map_or_default(|s| s.camera_profiles(&key));
 
         // Auto targets: built-ins engage every auto mode except Default, which
         // restores the device's own default states; customs use their snapshot
@@ -760,9 +758,8 @@ fn section_indices(sliders: &[ControlSlider], lens: bool) -> Vec<usize> {
 fn profiles_row(key: &str, cx: &mut Context<CameraControlsPanel>) -> gpui::Div {
     let state = AppState::try_read(cx);
     let active = state.and_then(|s| s.camera_active_profile(key));
-    let customs: Vec<String> = state
-        .map(|s| s.camera_profiles(key).keys().cloned().collect())
-        .unwrap_or_default();
+    let customs: Vec<String> =
+        state.map_or_default(|s| s.camera_profiles(key).keys().cloned().collect());
 
     let mut row = h_flex().flex_wrap().gap_1p5().items_center();
     for (ix, builtin) in BUILTIN_PROFILES.iter().enumerate() {

@@ -163,8 +163,7 @@ impl Config {
     pub fn bindings_for(&self, device_key: &str) -> BTreeMap<ButtonId, Binding> {
         self.devices
             .get(device_key)
-            .map(|d| d.bindings.clone())
-            .unwrap_or_default()
+            .map_or_default(|d| d.bindings.clone())
     }
 
     /// Records `binding` for `button` on `device_key`, creating the device
@@ -617,8 +616,7 @@ impl Config {
     pub fn action_ring(&self, device_key: &str) -> ActionRingConfig {
         self.devices
             .get(device_key)
-            .map(|device| device.action_ring.clone())
-            .unwrap_or_default()
+            .map_or_default(|device| device.action_ring.clone())
     }
 
     /// Enable or disable `device_key`'s Actions Ring.
@@ -687,8 +685,7 @@ impl Config {
     pub fn dpi_presets(&self, device_key: &str) -> Vec<Dpi> {
         self.devices
             .get(device_key)
-            .map(|d| d.dpi_presets.clone())
-            .unwrap_or_default()
+            .map_or_default(|d| d.dpi_presets.clone())
     }
 
     /// Replace the DPI preset list for `device_key`. Pass an empty `Vec` to
@@ -800,8 +797,7 @@ impl Config {
     pub fn camera_profiles(&self, device_key: &str) -> BTreeMap<String, CameraControls> {
         self.devices
             .get(device_key)
-            .map(|d| d.camera_profiles.clone())
-            .unwrap_or_default()
+            .map_or_default(|d| d.camera_profiles.clone())
     }
 
     /// Save (or overwrite) a custom camera profile for `device_key`.
