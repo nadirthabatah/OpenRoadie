@@ -82,8 +82,9 @@ magnifier, or in high contrast.
 - **Keyboard.** Tab and Shift+Tab reach every control; Space or Enter
   activates it. Device menus, the rename dialog and Settings work from the
   keyboard, and opening a page puts focus on its title.
-- **Magnifiers.** Focus is reported to the system, so Windows Magnifier and
-  macOS Zoom follow it from control to control, and a long page scrolls to
+- **Magnifiers.** Focus is reported to the system, so Windows Magnifier,
+  macOS Zoom and GNOME's magnifier follow it from control to control, and a
+  long page scrolls to
   keep the focused control in view. The focused control is outlined in the
   text colour, which holds under high contrast.
 - **High contrast.** Follows Windows contrast themes, GNOME's high-contrast
@@ -121,7 +122,9 @@ Tested by this fork on real hardware:
   then ran on the Ubuntu box against the installed `.deb` and the real Nano
   receiver, and a keyboard tour reached every Settings page, the desk and
   each device tab, with and without high contrast, keeping focus on screen
-  throughout. That run used a virtual screen over SSH. On Windows the same
+  throughout. That run used a virtual screen over SSH. GNOME's magnifier was
+  then seen following Tab from control to control at three times zoom, in a
+  headless GNOME Shell 50 session on Wayland. On Windows the same
   scroll-to-focus check ran through UI Automation.
 
 Not tested by this fork yet:
