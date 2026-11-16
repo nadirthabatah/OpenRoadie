@@ -111,6 +111,33 @@ archlinux:
   packager: "AprilNEA <dev@aprilnea.me>"
 
 overrides:
+  # The .deb and .rpm declared nothing, so on a fresh Ubuntu 22.04 the GUI and
+  # overlay would not start (libxkbcommon-x11 missing). These are what the four
+  # binaries link, plus EGL and Wayland, which the GUI loads at run time, and
+  # one font: a minimal system has none, and without one the GUI stops at
+  # startup with "failed to resolve font" (found on a fresh Fedora 45).
+  deb:
+    depends:
+      - libc6 (>= 2.35)
+      - libgcc-s1
+      - libxcb1
+      - libxkbcommon0
+      - libxkbcommon-x11-0
+      - libegl1
+      - libwayland-client0
+      - libwayland-egl1
+      - fonts-dejavu-core
+  rpm:
+    depends:
+      - glibc
+      - libgcc
+      - libxcb
+      - libxkbcommon
+      - libxkbcommon-x11
+      - libglvnd-egl
+      - libwayland-client
+      - libwayland-egl
+      - dejavu-sans-fonts
   archlinux:
     depends:
       - dbus
@@ -121,6 +148,7 @@ overrides:
       - libxcb
       - libxkbcommon
       - libxkbcommon-x11
+      - ttf-dejavu
       - vulkan-icd-loader
       - wayland
 
