@@ -1,12 +1,12 @@
 //! Permissions settings page (macOS / Linux).
 
 #[cfg(target_os = "macos")]
-use super::{App, AppState, InteractiveElement, Permission};
+use super::{App, AppState, Permission};
 use super::{IconName, Palette, SettingPage};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use super::{
-    ParentElement, PermissionStatus, SettingField, SettingGroup, SettingItem, SharedString, Styled,
-    div, h_flex, px, rgb, theme,
+    InteractiveElement, ParentElement, PermissionStatus, SettingGroup, SettingItem, SharedString,
+    StatefulInteractiveElement, Styled, div, h_flex, px, rgb, theme,
 };
 use crate::ui::theme::Typography as _;
 #[cfg(target_os = "macos")]
@@ -82,12 +82,15 @@ pub(super) fn permissions_page(has_camera: bool) -> SettingPage {
         // when everything is already working.
         SettingItem::new(
             tr!("Input device access"),
-            SettingField::render(move |_, _, cx| {
+            super::field(move |_, _, cx| {
                 let pal = theme::palette(cx);
                 let status = permissions::input_device_access();
-                let field = gpui_component::v_flex()
-                    .gap_1()
-                    .child(status_badge(status, pal));
+                let field = gpui_component::v_flex().gap_1().child(status_badge(
+                    "perm-input-device-access",
+                    &tr!("Input device access"),
+                    status,
+                    pal,
+                ));
                 let hint = match status {
                     PermissionStatus::Denied => Some(tr!(
                         "OpenRoadie needs write access to /dev/uinput (for button \
@@ -122,7 +125,7 @@ pub(super) fn permissions_page(has_camera: bool) -> SettingPage {
 fn input_monitoring_item() -> SettingItem {
     SettingItem::new(
                 tr!("Input Monitoring"),
-                SettingField::render(move |_, _, cx| {
+                super::field(move |_, _, cx| {
                     let status = AppState::try_global(cx)
                         .map(|state| state.read(cx))
                         .and_then(AppState::agent_status);
@@ -140,6 +143,7 @@ fn input_monitoring_item() -> SettingItem {
                     };
                     let field = gpui_component::v_flex().gap_1().child(permission_field(
                         "perm-input-monitoring",
+                        &tr!("Input Monitoring"),
                         badge,
                         Permission::InputMonitoring,
                         cx,
@@ -169,39 +173,61 @@ fn permission_item(
     permission: Permission,
     status: impl Fn(&App) -> PermissionStatus + 'static,
 ) -> SettingItem {
+    let name = title.clone();
     SettingItem::new(
         title,
-        SettingField::render(move |_, _, cx| permission_field(id, status(cx), permission, cx)),
+        super::field(move |_, _, cx| permission_field(id, &name, status(cx), permission, cx)),
     )
     .description(description)
 }
 
 /// A readable status word with colour retained as a supplemental marker.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-fn status_badge(status: PermissionStatus, pal: Palette) -> gpui::Div {
+fn status_badge(
+    id: &'static str,
+    name: &str,
+    status: PermissionStatus,
+    pal: Palette,
+) -> gpui::Stateful<gpui::Div> {
     let (label, color) = match status {
         PermissionStatus::Granted => (tr!("Granted"), theme::status_connected()),
         PermissionStatus::Denied => (tr!("Not granted"), theme::status_connecting()),
         PermissionStatus::Unknown => (tr!("Unknown"), theme::status_offline()),
     };
-    badge(label, color, pal)
+    badge(id, name, label, color, pal)
 }
 
+/// The status word, read with the setting it belongs to — "Input device
+/// access, Granted" — because the row's title beside it is drawn as text no
+/// screen reader reaches. On Linux this page has no control at all, so
+/// without it the page was silent.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-fn badge(label: SharedString, color: u32, pal: Palette) -> gpui::Div {
+fn badge(
+    id: &'static str,
+    name: &str,
+    label: SharedString,
+    color: u32,
+    pal: Palette,
+) -> gpui::Stateful<gpui::Div> {
+    let phrase = SharedString::from(format!("{name}, {label}"));
     h_flex()
+        .id(SharedString::from(format!("{id}-status")))
+        .role(gpui::accesskit::Role::Label)
+        .aria_label(phrase.clone())
+        .aria_value(phrase)
         .items_center()
         .gap_1()
         .text_caption()
         .text_color(pal.text_primary)
         .child(div().size(px(6.)).rounded_full().bg(rgb(color)))
-        .child(label)
+        .child(gpui::Text::new_inaccessible(label))
 }
 
 /// The right-side field for one permission row: live status plus an action button (a System Settings deep link, or the Camera consent prompt).
 #[cfg(target_os = "macos")]
 fn permission_field(
     id: &'static str,
+    name: &str,
     status: PermissionStatus,
     permission: Permission,
     cx: &App,
@@ -212,9 +238,9 @@ fn permission_field(
     let never_requested = matches!(status, PermissionStatus::Unknown)
         && matches!(permission, Permission::Bluetooth | Permission::Camera);
     let status_el = if never_requested {
-        badge(tr!("Not requested"), theme::status_offline(), pal)
+        badge(id, name, tr!("Not requested"), theme::status_offline(), pal)
     } else {
-        status_badge(status, pal)
+        status_badge(id, name, status, pal)
     };
     let prompts_here = never_requested && matches!(permission, Permission::Camera);
     let action_label = if prompts_here {
@@ -222,6 +248,9 @@ fn permission_field(
     } else {
         tr!("Open")
     };
+    // Four buttons all called "Open" could not be told apart; each says
+    // which permission it opens, the way the cache row's "Open" does.
+    let spoken = SharedString::from(format!("{action_label}, {name}"));
 
     h_flex()
         .flex_shrink_0()
@@ -230,7 +259,7 @@ fn permission_field(
         .child(status_el)
         .child(
             BaseButton::new(id)
-                .accessibility_label(action_label.clone())
+                .accessibility_label(spoken)
                 .px_2()
                 .py_1()
                 .rounded(pal.control_radius)
